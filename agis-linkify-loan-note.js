@@ -1,10 +1,14 @@
 // ==UserScript==
 // @name         AGIS loannote linkify
 // @namespace    victor.goryachko.tm
-// @version      2.6
+// @version      2.7
 // @description  Делает ссылки кликабельными в колонке "Контент" на страницах loannote/list
-// @include      https://agis.*/admin/*loannote/list*
-// @include      http://agis.*/admin/*loannote/list*
+// @match        https://agis.volgazaim.ru/admin/*/loannote/list*
+// @match        https://agis.creditsmile.ru/admin/*/loannote/list*
+// @match        https://agis.moneymania.ru/admin/*/loannote/list*
+// @match        http://agis.volgazaim.ru/admin/*/loannote/list*
+// @match        http://agis.creditsmile.ru/admin/*/loannote/list*
+// @match        http://agis.moneymania.ru/admin/*/loannote/list*
 // @run-at       document-idle
 // @grant        none
 // ==/UserScript==
@@ -72,8 +76,7 @@
         if (!textNode.nodeValue || !textNode.nodeValue.trim() || isInsideLink(textNode)) return;
 
         const text = textNode.nodeValue;
-        const re = getTokenRe();
-        if (!re.test(text)) return;
+        if (!getTokenRe().test(text)) return;
 
         const frag = document.createDocumentFragment();
         let lastIndex = 0;
@@ -87,21 +90,18 @@
                 frag.appendChild(document.createTextNode(text.slice(lastIndex, start)));
             }
 
-            const isMarkdown = match[1] !== undefined; // [text](url)
+            const isMarkdown = match[1] !== undefined;
             const token = match[0];
 
             if (isMarkdown) {
-                // [label](url) — преобразуем в ссылку с label-ом
                 const label = match[1];
                 const url = match[2];
                 const className = /RUSUPPORT-\d+/i.test(url) ? 'tm-jira-link' : 'tm-external-link';
                 frag.appendChild(createLink(url, label, className));
             } else if (/^https?:\/\//i.test(token)) {
-                // Голый URL
                 const className = /RUSUPPORT-\d+/i.test(token) ? 'tm-jira-link' : 'tm-external-link';
                 frag.appendChild(createLink(token, token, className));
             } else {
-                // Тикет RUSUPPORT-12345 без URL
                 frag.appendChild(createLink(JIRA_BASE + token, token, 'tm-jira-link'));
             }
 
@@ -118,7 +118,6 @@
     function processCell(cell) {
         if (!cell || processedCells.has(cell)) return;
         processedCells.add(cell);
-
         log('processing cell:', cell.innerText.trim());
 
         const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
@@ -131,8 +130,6 @@
     }
 
     function scan() {
-        // Цепляемся напрямую за класс ячеек колонки "Контент" —
-        // sonata-ba-list-field-textarea — это надёжнее чем искать по тексту заголовка
         const cells = document.querySelectorAll(
             'table.sonata-ba-list td.sonata-ba-list-field-textarea'
         );
@@ -143,7 +140,6 @@
     function observe() {
         let scanning = false;
         let timer = null;
-
         const observer = new MutationObserver(() => {
             if (scanning) return;
             clearTimeout(timer);
@@ -153,7 +149,6 @@
                 scanning = false;
             }, 300);
         });
-
         observer.observe(document.body, { childList: true, subtree: true });
     }
 
