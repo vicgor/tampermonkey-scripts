@@ -1,30 +1,35 @@
 // ==UserScript==
-// @name         AGIS loannote debug linkify
+// @name         AGIS loannote linkify
 // @namespace    victor.goryachko.tm
-// @version      2.4
+// @version      2.5
 // @description  Делает ссылки кликабельными в колонке "Контент" на страницах loannote/list
-// @match        https://agis.creditsmile.ru/admin/*loannote/list*
-// @match        https://agis.moneymania.ru/admin/*loannote/list*
-// @include      https://agis.volgazaim.ru/admin/*loannote/list*
+// @include      https://agis.*/admin/*loannote/list*
+// @include      http://agis.*/admin/*loannote/list*
 // @run-at       document-idle
 // @grant        none
 // ==/UserScript==
-
 
 (function () {
     'use strict';
 
     const JIRA_BASE = 'https://jira.aventus.work/browse/';
-    const URL_RE = /\bhttps?:\/\/[^\s<>"')\]]+/gi;
-    const TOKEN_RE = /\bhttps?:\/\/[^\s<>"')\]]+|\bRUSUPPORT-\d+\b/gi;
+    const DEBUG = false;
+
+    // Создаём regex локально, чтобы избежать проблем с shared lastIndex
+    function getTokenRe() {
+        return /\bhttps?:\/\/[^\s<>"')\]]+|\bRUSUPPORT-\d+\b/gi;
+    }
+
     const processedCells = new WeakSet();
 
     function log(...args) {
-        console.log('[TM loannote]', ...args);
+        if (DEBUG) console.log('[TM loannote]', ...args);
     }
 
     function addStyles() {
+        if (document.getElementById('tm-loannote-style')) return;
         const style = document.createElement('style');
+        style.id = 'tm-loannote-style';
         style.textContent = `
             a.tm-external-link {
                 color: #0b69a3 !important;
@@ -57,7 +62,7 @@
         );
 
         log('headers:', headers);
-        return headers.findIndex(text => text === 'Контент');
+        return headers.findIndex(text => text.includes('Контент'));
     }
 
     function isInsideLink(node) {
@@ -83,15 +88,15 @@
         const text = textNode.nodeValue;
         if (!text || !text.trim() || isInsideLink(textNode)) return;
 
-        TOKEN_RE.lastIndex = 0;
-        if (!TOKEN_RE.test(text)) return;
-        TOKEN_RE.lastIndex = 0;
+        const tokenRe = getTokenRe();
+        if (!tokenRe.test(text)) return;
 
         const frag = document.createDocumentFragment();
         let lastIndex = 0;
         let match;
+        const execRe = getTokenRe();
 
-        while ((match = TOKEN_RE.exec(text)) !== null) {
+        while ((match = execRe.exec(text)) !== null) {
             const token = match[0];
             const start = match.index;
 
@@ -158,20 +163,27 @@
 
     function scan() {
         const tables = findTargetTables();
-        log('started on', location.href);
-        log('tables found:', tables.length);
+        log('scan on', location.href, 'tables found:', tables.length);
         tables.forEach(processTable);
     }
 
     function observe() {
+        let scanning = false;
+        let timer = null;
+
         const observer = new MutationObserver(() => {
-            log('mutation observed, rescanning');
-            scan();
+            if (scanning) return;
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                scanning = true;
+                scan();
+                scanning = false;
+            }, 300);
         });
 
         observer.observe(document.body, {
             childList: true,
-            subtree: true
+            subtree: true,
         });
     }
 
