@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS loannote linkify
 // @namespace    victor.goryachko.tm
-// @version      2.5
+// @version      2.6
 // @description  Делает ссылки кликабельными в колонке "Контент" на страницах loannote/list
 // @include      https://agis.*/admin/*loannote/list*
 // @include      http://agis.*/admin/*loannote/list*
@@ -14,11 +14,6 @@
 
     const JIRA_BASE = 'https://jira.aventus.work/browse/';
     const DEBUG = false;
-
-    // Создаём regex локально, чтобы избежать проблем с shared lastIndex
-    function getTokenRe() {
-        return /\bhttps?:\/\/[^\s<>"')\]]+|\bRUSUPPORT-\d+\b/gi;
-    }
 
     const processedCells = new WeakSet();
 
@@ -46,23 +41,14 @@
         document.head.appendChild(style);
     }
 
-    function findTargetTables() {
-        return Array.from(document.querySelectorAll('table')).filter(table => {
-            const text = (table.innerText || '').replace(/\s+/g, ' ');
-            return text.includes('Контент') && text.includes('Владелец') && text.includes('Важно');
-        });
-    }
-
-    function findContentColumnIndex(table) {
-        const firstRow = table.querySelector('tr');
-        if (!firstRow) return -1;
-
-        const headers = Array.from(firstRow.children).map(cell =>
-            (cell.innerText || cell.textContent || '').replace(/\s+/g, ' ').trim()
-        );
-
-        log('headers:', headers);
-        return headers.findIndex(text => text.includes('Контент'));
+    function createLink(url, text, className) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.textContent = text || url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.className = className;
+        return a;
     }
 
     function isInsideLink(node) {
@@ -74,22 +60,20 @@
         return false;
     }
 
-    function createLink(url, className, text) {
-        const a = document.createElement('a');
-        a.href = url;
-        a.textContent = text || url;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        a.className = className;
-        return a;
+    // Обрабатывает 3 паттерна по приоритету:
+    // 1. Markdown-ссылка: [text](url)
+    // 2. Голый URL: https://...
+    // 3. Тикет Jira: RUSUPPORT-12345
+    function getTokenRe() {
+        return /\[([^\]]+)\]\((https?:\/\/[^)]+)\)|\bhttps?:\/\/[^\s<>"'\]]+|\bRUSUPPORT-\d+\b/gi;
     }
 
     function linkifyTextNode(textNode) {
-        const text = textNode.nodeValue;
-        if (!text || !text.trim() || isInsideLink(textNode)) return;
+        if (!textNode.nodeValue || !textNode.nodeValue.trim() || isInsideLink(textNode)) return;
 
-        const tokenRe = getTokenRe();
-        if (!tokenRe.test(text)) return;
+        const text = textNode.nodeValue;
+        const re = getTokenRe();
+        if (!re.test(text)) return;
 
         const frag = document.createDocumentFragment();
         let lastIndex = 0;
@@ -97,19 +81,28 @@
         const execRe = getTokenRe();
 
         while ((match = execRe.exec(text)) !== null) {
-            const token = match[0];
             const start = match.index;
 
             if (start > lastIndex) {
                 frag.appendChild(document.createTextNode(text.slice(lastIndex, start)));
             }
 
-            if (/^https?:\/\//i.test(token)) {
-                frag.appendChild(createLink(token, 'tm-external-link'));
-            } else if (/^RUSUPPORT-\d+$/i.test(token)) {
-                frag.appendChild(createLink(JIRA_BASE + token, 'tm-jira-link', token));
+            const isMarkdown = match[1] !== undefined; // [text](url)
+            const token = match[0];
+
+            if (isMarkdown) {
+                // [label](url) — преобразуем в ссылку с label-ом
+                const label = match[1];
+                const url = match[2];
+                const className = /RUSUPPORT-\d+/i.test(url) ? 'tm-jira-link' : 'tm-external-link';
+                frag.appendChild(createLink(url, label, className));
+            } else if (/^https?:\/\//i.test(token)) {
+                // Голый URL
+                const className = /RUSUPPORT-\d+/i.test(token) ? 'tm-jira-link' : 'tm-external-link';
+                frag.appendChild(createLink(token, token, className));
             } else {
-                frag.appendChild(document.createTextNode(token));
+                // Тикет RUSUPPORT-12345 без URL
+                frag.appendChild(createLink(JIRA_BASE + token, token, 'tm-jira-link'));
             }
 
             lastIndex = start + token.length;
@@ -126,45 +119,25 @@
         if (!cell || processedCells.has(cell)) return;
         processedCells.add(cell);
 
-        log('processing cell:', cell.innerText);
+        log('processing cell:', cell.innerText.trim());
 
         const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
         const nodes = [];
         let node;
-
         while ((node = walker.nextNode())) {
-            if (node.nodeValue && node.nodeValue.trim()) {
-                nodes.push(node);
-            }
+            if (node.nodeValue && node.nodeValue.trim()) nodes.push(node);
         }
-
         nodes.forEach(linkifyTextNode);
     }
 
-    function processTable(table) {
-        const rows = Array.from(table.querySelectorAll('tr'));
-        if (rows.length < 2) {
-            log('not enough rows');
-            return;
-        }
-
-        const contentIdx = findContentColumnIndex(table);
-        log('contentIdx =', contentIdx);
-
-        if (contentIdx < 0) return;
-
-        rows.slice(1).forEach((row, rowIndex) => {
-            const cells = row.children;
-            if (!cells || cells.length <= contentIdx) return;
-            log('row', rowIndex + 1, 'content =', cells[contentIdx].innerText);
-            processCell(cells[contentIdx]);
-        });
-    }
-
     function scan() {
-        const tables = findTargetTables();
-        log('scan on', location.href, 'tables found:', tables.length);
-        tables.forEach(processTable);
+        // Цепляемся напрямую за класс ячеек колонки "Контент" —
+        // sonata-ba-list-field-textarea — это надёжнее чем искать по тексту заголовка
+        const cells = document.querySelectorAll(
+            'table.sonata-ba-list td.sonata-ba-list-field-textarea'
+        );
+        log('content cells found:', cells.length);
+        cells.forEach(processCell);
     }
 
     function observe() {
@@ -181,10 +154,7 @@
             }, 300);
         });
 
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true,
-        });
+        observer.observe(document.body, { childList: true, subtree: true });
     }
 
     function main() {
