@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS loannote linkify
 // @namespace    victor.goryachko.tm
-// @version      2.7
+// @version      2.8
 // @description  Делает ссылки кликабельными в колонке "Контент" на страницах loannote/list
 // @match        https://agis.volgazaim.ru/admin/*/loannote/list*
 // @match        https://agis.creditsmile.ru/admin/*/loannote/list*
@@ -10,14 +10,28 @@
 // @match        http://agis.creditsmile.ru/admin/*/loannote/list*
 // @match        http://agis.moneymania.ru/admin/*/loannote/list*
 // @run-at       document-idle
-// @grant        none
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_registerMenuCommand
 // ==/UserScript==
 
 (function () {
     'use strict';
 
     const JIRA_BASE = 'https://jira.aventus.work/browse/';
-    const DEBUG = false;
+
+    // Флаг читается из постоянного хранилища; по умолчанию false
+    let DEBUG = GM_getValue('debug', false);
+
+    // Пункт меню в Tampermonkey для переключения DEBUG без правки кода
+    GM_registerMenuCommand(
+        `Debug-логи: ${DEBUG ? '✅ вкл' : '⬜ выкл'} — нажмите для переключения`,
+        () => {
+            DEBUG = !DEBUG;
+            GM_setValue('debug', DEBUG);
+            alert(`[TM loannote] Debug-логи ${DEBUG ? 'включены' : 'выключены'}. Обновите страницу.`);
+        }
+    );
 
     const processedCells = new WeakSet();
 
@@ -153,6 +167,7 @@
     }
 
     function main() {
+        log('init, DEBUG=true');
         addStyles();
         scan();
         observe();
