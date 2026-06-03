@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CreditSmile — Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      3.8
+// @version      3.9
 // @description  Полноширинная строка под навбаром с информацией о займе + цветной статус
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*
@@ -43,7 +43,7 @@
     const loanId   = (location.pathname.match(/\/loan(?:-[\w-]+)?\/(\d+)\b/) || [])[1];
     if (!loanId) return;
 
-    // path segment up to the ID — used for fallback fetch in getData()
+    // path segment up to the ID — used for fallback fetch
     const loanPath = (location.pathname.match(/(\/admin\/agis2\/core\/loan(?:-[\w-]+)?)\//)[1]);
 
     // ── Parsing ─────────────────────────────────────────────────────────────
@@ -54,8 +54,8 @@
      * @param {RegExp} labelRegex
      * @param {boolean} [firstTextOnly=false]
      *   true  — returns only the first non-empty Text node of <td> (before any <br>/<span>).
-     *           Used for "Статус" whose cell contains extra <span> tags that textContent
-     *           would concatenate without spaces.
+     *           Used for "Статус" whose cell may contain extra <span> tags
+     *           (e.g. "Начисления остановлены") that textContent concatenates without spaces.
      *   false — returns full normalised textContent of all child nodes (default).
      */
     function getRowValue(doc, labelRegex, firstTextOnly = false) {
@@ -95,7 +95,7 @@
         return rest.trim().replace(/^[:\s]+/, '') || null;
     }
 
-    /** Parse all required fields from a document (current page or fetched /edit). */
+    /** Parse all required fields from a document (show page or fetched /show). */
     function parseDoc(doc) {
         const data = {};
 
@@ -132,7 +132,7 @@
         data.loanType  = getRowValue(doc, /^Тип$/);
 
         // firstTextOnly=true: take only the leading text node before <br>/<span>
-        // so "Активный кредит" is not merged with "Начисления остановлены ..."
+        // so "Ожидает назначение коллектора" is not merged with "Начисления остановлены"
         data.status = getRowValue(doc, /^Статус\b/, true);
 
         return data;
@@ -140,42 +140,54 @@
 
     // ── Status colour ────────────────────────────────────────────────────────
     //
-    // Status names are exact values from "Название статуса на бэке" column
-    // in export.csv (loan section only). Grouped by visual severity:
+    // Exact values from "Название статуса на бэке" column in export.csv.
+    // Covers both LOAN and APPLICATION status sections.
     //
-    // RED    — terminal/problematic: просроченный, судебные, КА, продан, аннулирован
-    // GREY   — successfully closed: кредит возвращен
-    // YELLOW — transient / awaiting: процесс выдачи, в обработке, ожидает коллектора
-    // GREEN  — currently active: активный кредит, продлен, в работе коллектора
-    // BLUE   — fallback for unknown values
+    // RED    — terminal / problematic
+    // GREY   — successfully closed
+    // YELLOW — transient / pending
+    // GREEN  — currently active
+    // BLUE   — fallback for unlisted values
 
     const STATUS_RED = new Set([
-        'просроченный',
-        'аннулирован',
-        'продан',
-        'подготовка к продаже',
-        'инициирована судебная работа',
-        'в судебной работе',
-        'судебная работа завершена',
-        'исполнительное производство',
-        'в работе ка',
+        // LOAN — overdue, judicial, collection
+        'просроченный',                       // STATUS_OVERDUE
+        'аннулирован',                         // STATUS_GONE
+        'продан',                              // STATUS_SOLD
+        'подготовка к продаже',           // STATUS_PRESALE
+        'инициирована судебная работа', // STATUS_JUDICIAL_RECOVERY_STARTING
+        'в судебной работе',               // STATUS_JUDICIAL_RECOVERY_IN_PROGRESS
+        'судебная работа завершена',     // STATUS_JUDICIAL_RECOVERY_FINISH
+        'исполнительное производство',   // STATUS_JUDICIAL_ENFORCEMENT_PROCEEDINGS
+        'в работе ка',                          // STATUS_COLLECTION_AGENCY_IN_PROGRESS
+        // APPLICATION — rejected/terminated
+        'отказано',                            // STATUS_DENIED
+        'отложен',                             // STATUS_TERMINATED
     ]);
 
     const STATUS_GREY = new Set([
-        'кредит возвращен',
+        'кредит возвращен',                  // STATUS_RETURNED
     ]);
 
     const STATUS_YELLOW = new Set([
-        'процесс выдачи',
-        'в обработке',
-        'неудачная обработка',
-        'ожидает назначение коллектора',
+        // LOAN — transient processing
+        'процесс выдачи',                    // STATUS_AUTO_GIVEOUT_IN_PROGRESS
+        'в обработке',                        // STATUS_PROCESSING
+        'неудачная обработка',              // STATUS_PROCESSING_FAIL
+        'ожидает назначение коллектора', // STATUS_AWAITING_COLLECTOR
+        // APPLICATION — pending / awaiting
+        'новая заявка',                      // STATUS_REQUEST
+        'заявка одобрена',                  // STATUS_CONFIRMED
+        'заявка подтверждена клиентом',  // STATUS_CUSTOMER_CONFIRMATION
+        'ожидает подтверждения от клиента', // STATUS_AWAITING_CUSTOMER_CONFIRMATION
+        'проблема верификации',           // STATUS_VERIFICATION_PROBLEM
+        'ожидание суммы от клиента',    // STATUS_AWAITING_CUSTOMER_AMOUNT
     ]);
 
     const STATUS_GREEN = new Set([
-        'активный кредит',
-        'продлен',
-        'в работе коллектора',
+        'активный кредит',                    // STATUS_ACTIVE
+        'продлен',                             // STATUS_EXTENDED
+        'в работе коллектора',              // STATUS_COLLECTOR_IN_PROGRESS
     ]);
 
     function statusColor(status) {
@@ -185,7 +197,7 @@
         if (STATUS_GREY.has(s))   return { bg: '#e7e7e7', fg: '#555555', bd: '#d0d0d0' };
         if (STATUS_YELLOW.has(s)) return { bg: '#fcf8e3', fg: '#8a6d3b', bd: '#faebcc' };
         if (STATUS_GREEN.has(s))  return { bg: '#dff0d8', fg: '#3c763d', bd: '#d6e9c6' };
-        // fallback — blue for any status not yet catalogued
+        // fallback — blue for any status not in the CSV catalogue
         return { bg: '#d9edf7', fg: '#31708f', bd: '#bce8f1' };
     }
 
@@ -255,13 +267,12 @@
 
     // ── Cache & data loading ─────────────────────────────────────────────────
 
-    // _v38 suffix busts sessionStorage entries from older versions
-    const CACHE_KEY = 'cs_loan_' + loanId + '_v38';
+    // _v39 suffix busts sessionStorage entries from older versions
+    const CACHE_KEY = 'cs_loan_' + loanId + '_v39';
     const CACHE_TTL = 300 * 1000; // 5 minutes
 
-    // hasTable anchors on "Статус" which is present in ALL loan layouts
-    // (PayDay, Installment, overdue, etc.) — unlike "Сумма"/"Дата" which
-    // are absent in the Installment layout
+    // hasTable: page has the show-layout table with <th>Статус</th>.
+    // Edit pages have <input> fields instead — getRowValue finds nothing there.
     function hasTable(doc) {
         return !!getRowValue(doc, /^Статус\b/, true);
     }
@@ -290,8 +301,10 @@
         const cached = readCache();
         if (cached) return cached;
         try {
-            // fallback fetch uses actual path segment, not hardcoded "/loan"
-            const resp = await fetch(`${loanPath}/${loanId}/edit`, { credentials: 'include' });
+            // IMPORTANT: fetch /show, not /edit.
+            // The /edit page renders <input> fields, not <th>/<td> table rows,
+            // so parseDoc cannot extract status or amounts from it.
+            const resp = await fetch(`${loanPath}/${loanId}/show`, { credentials: 'include' });
             if (!resp.ok) return null;
             const fetchedDoc = new DOMParser().parseFromString(await resp.text(), 'text/html');
             const data = parseDoc(fetchedDoc);
