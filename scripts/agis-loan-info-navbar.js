@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CreditSmile — Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      3.1
+// @version      3.2
 // @description  Полноширинная строка под навбаром с информацией о займе + цветной статус
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*
@@ -38,6 +38,8 @@
         const idx = text.indexOf(key);
         if (idx === -1) return null;
         let rest = text.slice(idx + key.length);
+        // fix: используем /\n|$/ вместо /$/ чтобы корректно останавливаться
+        // в многострочном innerText (без флага m, /$/  матчит только конец строки целиком)
         const m = rest.match(stopRegex);
         if (m && m.index !== undefined && m.index > 0) rest = rest.slice(0, m.index);
         return rest.trim().replace(/^[:\s]+/, '');
@@ -48,25 +50,24 @@
 
         const sumCell = getRowValue(doc, /^Сумма$/);
         if (sumCell) {
-            d.telo  = extract(sumCell, 'Тело', /Вознаграждение|Сумма продл|Штраф|Депозит|Итого|$/);
-            d.itogo = extract(sumCell, 'Итого на сегодня', /$/);
+            d.telo  = extract(sumCell, 'Тело', /Вознаграждение|Сумма продл|Штраф|Депозит|Итого|\n|$/);
+            // fix: /\n|$/ вместо /$/ — корректная остановка в многострочном тексте
+            d.itogo = extract(sumCell, 'Итого на сегодня', /\n|$/);
         }
 
         const dateCell = getRowValue(doc, /^Дата$/);
         if (dateCell) {
-            d.vydan      = extract(dateCell, 'Выдан:', /Время выдачи|До:|Продлен|Итого|Просрочен|$/);
-            d.doDate     = extract(dateCell, 'До:', /Продлен|Итого|Просрочен|$/);
-            d.srok       = extract(dateCell, 'Итого:', /Просрочен|$/);
-            d.prosrochka = extract(dateCell, 'Просрочен на:', /$/);
+            d.vydan      = extract(dateCell, 'Выдан:', /Время выдачи|До:|Продлен|Итого|Просрочен|\n|$/);
+            d.doDate     = extract(dateCell, 'До:', /Продлен|Итого|Просрочен|\n|$/);
+            d.srok       = extract(dateCell, 'Итого:', /Просрочен|\n|$/);
+            d.prosrochka = extract(dateCell, 'Просрочен на:', /\n|$/);
+            // fix: парсим prodlenDo из dateCell, а не из body.innerText (был медленный /[^]*?/ по всему документу)
+            d.prodlenDo  = extract(dateCell, 'до:', /Итого|Просрочен|\n|$/);
         }
 
         d.prajslist = getRowValue(doc, /^Прайслист$/);
         d.tip       = getRowValue(doc, /^Тип$/);
         d.status    = getRowValue(doc, /^Статус\b/);
-
-        const prodlen = doc.body.innerText.match(/Займ продлен с\s*[\d.]+\s*по\s*([\d.]+)/i)
-                     || doc.body.innerText.match(/Продлен:[^]*?до:\s*([\d.]+|[\d]{1,2}\s+\S+\.?\s+\d{4})/i);
-        if (prodlen) d.prodlenDo = prodlen[1];
 
         return d;
     }
@@ -80,7 +81,7 @@
         if (/просроч|дефолт|цесси|продан|списан|банкрот|аннулир|отказ|расторг/.test(s))
             return { bg: '#f2dede', fg: '#a94442', bd: '#ebccd1' };
         // Серый — завершённые без проблем
-        if (/закрыт|погаш|выплач|завершён|завершен/.test(s))
+        if (/закрыт|погаш|выплач|завершён|завершен|возвращ/.test(s))
             return { bg: '#e7e7e7', fg: '#555', bd: '#d0d0d0' };
         // Жёлтый — переходные/ожидание
         if (/ожид|обработ|рассмотр|заявк|на проверк|пролонг/.test(s))
@@ -152,7 +153,7 @@
         navbar.parentNode.insertBefore(bar, navbar.nextSibling);
     }
 
-    // --- Данные (DOM или fetch с /edit) ------------------------------------
+    // --- Кэш и получение данных --------------------------------------------
 
     const CACHE_KEY = 'cs_loan_' + loanId;
     const CACHE_TTL = 60 * 1000;
@@ -184,6 +185,9 @@
         if (cached) return cached;
         try {
             const resp = await fetch(`/admin/agis2/core/loan/${loanId}/edit`, { credentials: 'include' });
+            // fix: проверяем HTTP-статус перед парсингом — без этого страница 403/redirect
+            // парсилась как пустой объект и рендерился пустой бар
+            if (!resp.ok) return null;
             const doc = new DOMParser().parseFromString(await resp.text(), 'text/html');
             const d = parseDoc(doc);
             toCache(d);
