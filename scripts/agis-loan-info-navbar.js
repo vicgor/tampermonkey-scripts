@@ -1,8 +1,9 @@
 // ==UserScript==
 // @name         CreditSmile — Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      3.3
+// @version      3.4
 // @description  Полноширинная строка под навбаром с информацией о займе + цветной статус
+// @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*
 // @match        https://agis.moneymania.ru/admin/agis2/core/loan/*
@@ -27,8 +28,6 @@
         for (const th of ths) {
             if (labelRegex.test(th.textContent.trim())) {
                 const td = th.parentElement.querySelector('td');
-                // fix: используем textContent вместо innerText — innerText возвращает ''
-                // для элементов с display:none (например скрытые <dt> в таблице сумм)
                 if (td) return td.textContent.replace(/\s+/g, ' ').trim();
             }
         }
@@ -50,8 +49,8 @@
 
         const sumCell = getRowValue(doc, /^Сумма$/);
         if (sumCell) {
-            d.telo  = extract(sumCell, 'Тело', /Вознаграждение|Сумма продл|Штраф|Депозит|Итого|\n|$/);
-            d.itogo = extract(sumCell, 'Итого на сегодня', /\n|$/);
+            d.telo     = extract(sumCell, 'Тело', /Вознаграждение|Сумма продл|Штраф|Депозит|Итого|\n|$/);
+            d.itogo    = extract(sumCell, 'Итого на сегодня', /\n|$/);
         }
 
         const dateCell = getRowValue(doc, /^Дата$/);
@@ -63,7 +62,7 @@
             d.prodlenDo  = extract(dateCell, 'до:', /Итого|Просрочен|\n|$/);
         }
 
-        d.prajslist = getRowValue(doc, /^Прайслист$/);
+        d.priceList = getRowValue(doc, /^Прайслист$/);
         d.tip       = getRowValue(doc, /^Тип$/);
         d.status    = getRowValue(doc, /^Статус\b/);
 
@@ -75,20 +74,14 @@
     function statusColor(status) {
         if (!status) return null;
         const s = status.toLowerCase();
-        // Красный — проблемные/просроченные/закрытые с потерями
         if (/просроч|дефолт|цесси|продан|списан|банкрот|аннулир|отказ|расторг/.test(s))
             return { bg: '#f2dede', fg: '#a94442', bd: '#ebccd1' };
-        // Серый — завершённые без проблем (fix: добавлен 'возвращ' — статус «Кредит возвращен»
-        // не попадал ни в одну группу и получал синий цвет по умолчанию)
         if (/закрыт|погаш|выплач|завершён|завершен|возвращ/.test(s))
             return { bg: '#e7e7e7', fg: '#555', bd: '#d0d0d0' };
-        // Жёлтый — переходные/ожидание
         if (/ожид|обработ|рассмотр|заявк|на проверк|пролонг/.test(s))
             return { bg: '#fcf8e3', fg: '#8a6d3b', bd: '#faebcc' };
-        // Зелёный — активный/выдан
         if (/активн|выдан|действ/.test(s))
             return { bg: '#dff0d8', fg: '#3c763d', bd: '#d6e9c6' };
-        // По умолчанию — синий
         return { bg: '#d9edf7', fg: '#31708f', bd: '#bce8f1' };
     }
 
@@ -127,14 +120,19 @@
 
         const bar = document.createElement('div');
         bar.id = 'cs-loan-bar';
-        bar.style.cssText = [
-            'width:100%', 'box-sizing:border-box',
-            'display:flex', 'flex-wrap:wrap', 'align-items:center',
-            'padding:6px 16px',
-            'background:#eef3f8', 'border-top:1px solid #d6e0ea',
-            'border-bottom:1px solid #d6e0ea',
-            'font-family:system-ui,Arial,sans-serif'
-        ].join(';');
+        // style: Object.assign вместо array.join — стандартный и более читаемый способ
+        Object.assign(bar.style, {
+            width:          '100%',
+            boxSizing:      'border-box',
+            display:        'flex',
+            flexWrap:       'wrap',
+            alignItems:     'center',
+            padding:        '6px 16px',
+            background:     '#eef3f8',
+            borderTop:      '1px solid #d6e0ea',
+            borderBottom:   '1px solid #d6e0ea',
+            fontFamily:     'system-ui,Arial,sans-serif',
+        });
 
         bar.innerHTML =
             buildStatusItem(d.status) +
@@ -145,7 +143,7 @@
             buildItem('Продлен до', d.prodlenDo) +
             buildItem('Тело', d.telo) +
             buildItem('Итого', d.itogo) +
-            buildItem('Прайслист', d.prajslist) +
+            buildItem('Прайслист', d.priceList) +
             buildItem('Тип', d.tip) +
             buildItem('Займ', '#' + loanId);
 
@@ -155,8 +153,6 @@
     // --- Кэш и получение данных --------------------------------------------
 
     const CACHE_KEY = 'cs_loan_' + loanId;
-    // fix: увеличен TTL с 60с до 300с — данные займа редко меняются
-    // в рамках одной сессии, лишний fetch при каждом переходе между вкладками не нужен
     const CACHE_TTL = 300 * 1000;
 
     function hasTable(doc) {
