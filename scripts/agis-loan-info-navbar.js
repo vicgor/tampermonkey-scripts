@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         CreditSmile — Инфо о займе (все страницы)
+// @name         AGIS Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      4.0
+// @version      4.1
 // @description  Полноширинная строка под навбаром с информацией о займе и цветным статусом
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*
@@ -24,7 +24,7 @@
     const BAR_ID = 'cs-loan-bar';
     const NAVBAR_SELECTOR = '.navbar-static-top';
     const CACHE_TTL = 5 * 60 * 1000;
-    const CACHE_VERSION = 'v40';
+    const CACHE_VERSION = 'v41';
     const WAIT_TIMEOUT = 20000;
 
     let routeToken = 0;
@@ -68,6 +68,33 @@
         'активный кредит',
         'продлен',
         'в работе коллектора',
+    ]);
+
+    const RU_MONTHS = new Map([
+        ['января', '01'],
+        ['январь', '01'],
+        ['февраля', '02'],
+        ['февраль', '02'],
+        ['марта', '03'],
+        ['март', '03'],
+        ['апреля', '04'],
+        ['апрель', '04'],
+        ['мая', '05'],
+        ['май', '05'],
+        ['июня', '06'],
+        ['июнь', '06'],
+        ['июля', '07'],
+        ['июль', '07'],
+        ['августа', '08'],
+        ['август', '08'],
+        ['сентября', '09'],
+        ['сентябрь', '09'],
+        ['октября', '10'],
+        ['октябрь', '10'],
+        ['ноября', '11'],
+        ['ноябрь', '11'],
+        ['декабря', '12'],
+        ['декабрь', '12'],
     ]);
 
     function setManagedTimeout(callback, delay) {
@@ -292,6 +319,89 @@
             .trim();
     }
 
+    function pad2(value) {
+        return String(value).padStart(2, '0');
+    }
+
+    function toTwoDigitYear(year) {
+        const normalized = String(year || '').trim();
+
+        if (/^\d{4}$/.test(normalized)) {
+            return normalized.slice(-2);
+        }
+
+        if (/^\d{2}$/.test(normalized)) {
+            return normalized;
+        }
+
+        return null;
+    }
+
+    function isValidDateParts(day, month, year) {
+        const dayNumber = Number(day);
+        const monthNumber = Number(month);
+        const yearNumber = Number(year);
+
+        if (!Number.isInteger(dayNumber) || !Number.isInteger(monthNumber) || !Number.isInteger(yearNumber)) {
+            return false;
+        }
+
+        if (dayNumber < 1 || dayNumber > 31) return false;
+        if (monthNumber < 1 || monthNumber > 12) return false;
+        if (yearNumber < 0) return false;
+
+        return true;
+    }
+
+    function buildShortDate(day, month, year) {
+        if (!isValidDateParts(day, month, year)) return null;
+
+        const yy = toTwoDigitYear(year);
+        if (!yy) return null;
+
+        return `${pad2(day)}.${pad2(month)}.${yy}`;
+    }
+
+    function formatDateDDMMYY(value) {
+        const text = normalizeText(value);
+        if (!text) return null;
+
+        // ISO-подобный формат: 2026-06-03, 2026.06.03, 2026/06/03
+        const isoMatch = text.match(/\b(\d{4})[-./](\d{1,2})[-./](\d{1,2})\b/);
+        if (isoMatch) {
+            return buildShortDate(isoMatch[3], isoMatch[2], isoMatch[1]) || text;
+        }
+
+        // Привычный формат: 03.06.2026, 3-6-2026, 03/06/26
+        const ruNumericMatch = text.match(/\b(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})\b/);
+        if (ruNumericMatch) {
+            return buildShortDate(ruNumericMatch[1], ruNumericMatch[2], ruNumericMatch[3]) || text;
+        }
+
+        // Текстовый формат: 3 июня 2026
+        const ruTextMatch = text.toLowerCase().match(/\b(\d{1,2})\s+([а-яё]+)\s+(\d{2,4})\b/u);
+        if (ruTextMatch) {
+            const month = RU_MONTHS.get(ruTextMatch[2]);
+
+            if (month) {
+                return buildShortDate(ruTextMatch[1], month, ruTextMatch[3]) || text;
+            }
+        }
+
+        return text;
+    }
+
+    function applyDateFormatting(data) {
+        const formatted = { ...data };
+
+        // Форматируем только настоящие даты, не трогая срок и просрочку.
+        formatted.issuedOn = formatDateDDMMYY(formatted.issuedOn);
+        formatted.dueDate = formatDateDDMMYY(formatted.dueDate);
+        formatted.extendedTo = formatDateDDMMYY(formatted.extendedTo);
+
+        return compactData(formatted);
+    }
+
     function parseLoanContextFromUrl() {
         try {
             const url = new URL(location.href);
@@ -457,7 +567,7 @@
         data.loanType = getRowValue(doc, /^Тип$/);
         data.status = getRowValue(doc, /^Статус\b/, { firstTextOnly: true });
 
-        return compactData(data);
+        return applyDateFormatting(compactData(data));
     }
 
     async function readCache(context) {
@@ -467,15 +577,17 @@
         if (!entry.timestamp || Date.now() - entry.timestamp > CACHE_TTL) return null;
         if (!hasUsefulData(entry.data)) return null;
 
-        return entry.data;
+        return applyDateFormatting(entry.data);
     }
 
     function writeCache(context, data) {
-        if (!hasUsefulData(data)) return;
+        const formattedData = applyDateFormatting(data);
+
+        if (!hasUsefulData(formattedData)) return;
 
         storageSetDebounced(context.cacheKey, {
             timestamp: Date.now(),
-            data,
+            data: formattedData,
         });
     }
 
@@ -585,9 +697,11 @@
     function render(context, data, navbar) {
         if (!context || !hasUsefulData(data) || !navbar) return;
 
+        const formattedData = applyDateFormatting(data);
+
         const signature = JSON.stringify({
             id: context.id,
-            data,
+            data: formattedData,
         });
 
         if (signature === lastRenderSignature && document.getElementById(BAR_ID)) {
@@ -617,16 +731,16 @@
         });
 
         const items = [
-            createStatusItem(data.status),
-            createItem('Выдан', data.issuedOn),
-            createItem('До', data.dueDate),
-            createItem('Срок', data.totalTerm),
-            createItem('Просрочка', data.overdueDays, { highlight: !!data.overdueDays }),
-            createItem('Продлен до', data.extendedTo),
-            createItem('Тело', data.body),
-            createItem('Итого', data.total),
-            createItem('Прайслист', data.priceList),
-            createItem('Тип', data.loanType),
+            createStatusItem(formattedData.status),
+            createItem('Выдан', formattedData.issuedOn),
+            createItem('До', formattedData.dueDate),
+            createItem('Срок', formattedData.totalTerm),
+            createItem('Просрочка', formattedData.overdueDays, { highlight: !!formattedData.overdueDays }),
+            createItem('Продлен до', formattedData.extendedTo),
+            createItem('Тело', formattedData.body),
+            createItem('Итого', formattedData.total),
+            createItem('Прайслист', formattedData.priceList),
+            createItem('Тип', formattedData.loanType),
             createItem('Займ', `#${context.id}`),
         ].filter(Boolean);
 
