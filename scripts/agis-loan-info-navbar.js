@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CreditSmile — Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      3.2
+// @version      3.3
 // @description  Полноширинная строка под навбаром с информацией о займе + цветной статус
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*
@@ -27,7 +27,9 @@
         for (const th of ths) {
             if (labelRegex.test(th.textContent.trim())) {
                 const td = th.parentElement.querySelector('td');
-                if (td) return td.innerText.replace(/\s+/g, ' ').trim();
+                // fix: используем textContent вместо innerText — innerText возвращает ''
+                // для элементов с display:none (например скрытые <dt> в таблице сумм)
+                if (td) return td.textContent.replace(/\s+/g, ' ').trim();
             }
         }
         return null;
@@ -38,8 +40,6 @@
         const idx = text.indexOf(key);
         if (idx === -1) return null;
         let rest = text.slice(idx + key.length);
-        // fix: используем /\n|$/ вместо /$/ чтобы корректно останавливаться
-        // в многострочном innerText (без флага m, /$/  матчит только конец строки целиком)
         const m = rest.match(stopRegex);
         if (m && m.index !== undefined && m.index > 0) rest = rest.slice(0, m.index);
         return rest.trim().replace(/^[:\s]+/, '');
@@ -51,7 +51,6 @@
         const sumCell = getRowValue(doc, /^Сумма$/);
         if (sumCell) {
             d.telo  = extract(sumCell, 'Тело', /Вознаграждение|Сумма продл|Штраф|Депозит|Итого|\n|$/);
-            // fix: /\n|$/ вместо /$/ — корректная остановка в многострочном тексте
             d.itogo = extract(sumCell, 'Итого на сегодня', /\n|$/);
         }
 
@@ -61,7 +60,6 @@
             d.doDate     = extract(dateCell, 'До:', /Продлен|Итого|Просрочен|\n|$/);
             d.srok       = extract(dateCell, 'Итого:', /Просрочен|\n|$/);
             d.prosrochka = extract(dateCell, 'Просрочен на:', /\n|$/);
-            // fix: парсим prodlenDo из dateCell, а не из body.innerText (был медленный /[^]*?/ по всему документу)
             d.prodlenDo  = extract(dateCell, 'до:', /Итого|Просрочен|\n|$/);
         }
 
@@ -80,7 +78,8 @@
         // Красный — проблемные/просроченные/закрытые с потерями
         if (/просроч|дефолт|цесси|продан|списан|банкрот|аннулир|отказ|расторг/.test(s))
             return { bg: '#f2dede', fg: '#a94442', bd: '#ebccd1' };
-        // Серый — завершённые без проблем
+        // Серый — завершённые без проблем (fix: добавлен 'возвращ' — статус «Кредит возвращен»
+        // не попадал ни в одну группу и получал синий цвет по умолчанию)
         if (/закрыт|погаш|выплач|завершён|завершен|возвращ/.test(s))
             return { bg: '#e7e7e7', fg: '#555', bd: '#d0d0d0' };
         // Жёлтый — переходные/ожидание
@@ -156,7 +155,9 @@
     // --- Кэш и получение данных --------------------------------------------
 
     const CACHE_KEY = 'cs_loan_' + loanId;
-    const CACHE_TTL = 60 * 1000;
+    // fix: увеличен TTL с 60с до 300с — данные займа редко меняются
+    // в рамках одной сессии, лишний fetch при каждом переходе между вкладками не нужен
+    const CACHE_TTL = 300 * 1000;
 
     function hasTable(doc) {
         return !!getRowValue(doc, /^Дата$/) || !!getRowValue(doc, /^Сумма$/);
@@ -185,8 +186,6 @@
         if (cached) return cached;
         try {
             const resp = await fetch(`/admin/agis2/core/loan/${loanId}/edit`, { credentials: 'include' });
-            // fix: проверяем HTTP-статус перед парсингом — без этого страница 403/redirect
-            // парсилась как пустой объект и рендерился пустой бар
             if (!resp.ok) return null;
             const doc = new DOMParser().parseFromString(await resp.text(), 'text/html');
             const d = parseDoc(doc);
