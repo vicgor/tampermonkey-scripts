@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      4.3
+// @version      4.4
 // @description  Полноширинная строка под навбаром с информацией о займе и цветным статусом
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*
@@ -30,7 +30,7 @@
         '#content',
     ];
     const CACHE_TTL    = 5 * 60 * 1000;
-    const CACHE_VERSION = 'v43';
+    const CACHE_VERSION = 'v44';
     const WAIT_TIMEOUT = 20000;
 
     let routeToken = 0;
@@ -167,7 +167,7 @@
         return waitForElement(NAVBAR_SELECTORS.join(', '))
             .catch((err) => {
                 console.warn(
-                    `[${SCRIPT_NAME}] Навбар не найден за ${WAIT_TIMEOUT} мс (${location.href}).`,
+                    `[${SCRIPT_NAME}] Навбар не найден за ${WAIT_TIMEOUT} мс (${location.href}).`,
                     'Пробовались селекторы:', NAVBAR_SELECTORS.join(', ')
                 );
                 throw err;
@@ -500,12 +500,23 @@
         if (!context) { removeBar(); return; }
 
         try {
+            // Ждём DOM — navbar может появиться позже таблицы или вовсе не сразу.
+            // Проверку токена делаем ПОСЛЕ получения navbar: если URL успел смениться пока
+            // мы ждали DOM, новый bootstrap уже инкрементировал routeToken и вызвал cleanupRoute.
+            // В этом случае navbar уже получен, но рендерить данные старого маршрута не нужно.
             const navbar = await waitForNavbar();
+
+            // Первая проверка токена: сразу после получения navbar, до любой работы с данными.
             if (token !== routeToken) return;
 
             const parsed = await refreshFromDocument(context, navbar);
+
+            // Вторая проверка токена: после асинхронного парсинга документа.
+            if (token !== routeToken) return;
+
             if (!parsed) {
                 const cached = await readCache(context);
+                // Третья проверка токена: после потенциально медленного GM_getValue.
                 if (token !== routeToken) return;
                 if (cached) render(context, cached, navbar);
             }
