@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CreditSmile — Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      3.5
+// @version      3.6
 // @description  Полноширинная строка под навбаром с информацией о займе + цветной статус
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*
@@ -48,12 +48,32 @@
 
     // --- Парсинг -----------------------------------------------------------
 
-    function getRowValue(doc, labelRegex) {
+    /**
+     * @param {Document} doc
+     * @param {RegExp} labelRegex
+     * @param {boolean} [firstTextOnly=false]
+     *   true  — возвращает только первый непустой Text-узел <td>.
+     *   Используется для статуса: ячейка содержит <br> и <span> с доп.информацией,
+     *   которые textContent склеивает без пробела — регессия от замены innerText → textContent.
+     *   false — возвращает полный textContent всех дочерних узлов (default).
+     */
+    function getRowValue(doc, labelRegex, firstTextOnly = false) {
         const ths = doc.querySelectorAll('th');
         for (const th of ths) {
             if (labelRegex.test(th.textContent.trim())) {
                 const td = th.parentElement.querySelector('td');
-                if (td) return td.textContent.replace(/\s+/g, ' ').trim();
+                if (!td) continue;
+                if (firstTextOnly) {
+                    // берём только первый непустой Text-узел — то, что идёт до <br> или вложенных <span>
+                    for (const node of td.childNodes) {
+                        if (node.nodeType === Node.TEXT_NODE) {
+                            const t = node.textContent.trim();
+                            if (t) return t;
+                        }
+                    }
+                    return null;
+                }
+                return td.textContent.replace(/\s+/g, ' ').trim();
             }
         }
         return null;
@@ -89,7 +109,9 @@
 
         d.priceList = getRowValue(doc, /^Прайслист$/);
         d.tip       = getRowValue(doc, /^Тип$/);
-        d.status    = getRowValue(doc, /^Статус\b/);
+        // firstTextOnly=true: берём только головный текст до <br>/<span>,
+        // чтобы не сливать воедино «Активный кредитНачисления остановлены...»
+        d.status    = getRowValue(doc, /^Статус\b/, true);
 
         return d;
     }
