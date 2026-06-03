@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      4.4
+// @version      4.5
 // @description  Полноширинная строка под навбаром с информацией о займе и цветным статусом
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*
@@ -15,6 +15,14 @@
 // @sandbox      DOM
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_xmlhttpRequest
+// @connect      agis.creditsmile.ru
+// @connect      agis.credit7.ru
+// @connect      agis.belkacredit.ru
+// @connect      agis.berrycash.ru
+// @connect      agis.credit365.ru
+// @connect      agis.volgazaim.ru
+// @connect      agis.moneymania.ru
 // ==/UserScript==
 
 (function () {
@@ -390,6 +398,30 @@
         storageSetDebounced(context.cacheKey, { timestamp: Date.now(), data: fd });
     }
 
+    // --- Запрос к бэкенду (fallback когда DOM пустой и кеш устарел) ---
+    // Использует GM_xmlhttpRequest чтобы обойти CSP сайта.
+    // URL абсолютный — context.host берётся из текущего location.
+    function fetchFromBackend(context) {
+        const url = `https://${context.host}/admin/agis2/core/${context.section}/${context.id}/show`;
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url,
+                onload: (resp) => {
+                    if (resp.status !== 200) {
+                        reject(new Error(`fetchFromBackend: HTTP ${resp.status} (${url})`));
+                        return;
+                    }
+                    const doc = new DOMParser().parseFromString(resp.responseText, 'text/html');
+                    const data = parseDoc(doc);
+                    if (hasUsefulData(data)) resolve(data);
+                    else reject(new Error('fetchFromBackend: no useful data in /show response'));
+                },
+                onerror: (e) => reject(new Error(`fetchFromBackend: network error (${url})`)),
+            });
+        });
+    }
+
     // --- Рендеринг ---
 
     function statusColor(status) {
@@ -518,7 +550,23 @@
                 const cached = await readCache(context);
                 // Третья проверка токена: после потенциально медленного GM_getValue.
                 if (token !== routeToken) return;
-                if (cached) render(context, cached, navbar);
+
+                if (cached) {
+                    render(context, cached, navbar);
+                } else {
+                    // DOM пустой и кеш устарел — запрашиваем данные у бэкенда напрямую.
+                    // Актуально когда страница открыта через AJAX-навигацию до того,
+                    // как таблица появилась в DOM, а кеш уже истёк.
+                    try {
+                        const backendData = await fetchFromBackend(context);
+                        // Четвёртая проверка токена: после сетевого запроса (самый долгий await).
+                        if (token !== routeToken) return;
+                        writeCache(context, backendData);
+                        render(context, backendData, navbar);
+                    } catch (e) {
+                        console.warn(`[${SCRIPT_NAME}] backend fallback failed:`, e.message);
+                    }
+                }
             }
 
             // Единственный observer на изменения таблиц — перезапускает парсинг с debounce
