@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CreditSmile — Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      3.7
+// @version      3.8
 // @description  Полноширинная строка под навбаром с информацией о займе + цветной статус
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*
@@ -55,7 +55,7 @@
      * @param {boolean} [firstTextOnly=false]
      *   true  — returns only the first non-empty Text node of <td> (before any <br>/<span>).
      *           Used for "Статус" whose cell contains extra <span> tags that textContent
-     *           would concatenate without spaces (regression from innerText → textContent).
+     *           would concatenate without spaces.
      *   false — returns full normalised textContent of all child nodes (default).
      */
     function getRowValue(doc, labelRegex, firstTextOnly = false) {
@@ -102,7 +102,7 @@
         // ── PayDay layout: field "Сумма" ────────────────────────────────────
         const sumCell = getRowValue(doc, /^Сумма$/);
         if (sumCell) {
-            data.body  = extractValue(sumCell, 'Тело',            /Вознаграждение|Сумма продл|Штраф|Депозит|Итого|\n|$/);
+            data.body  = extractValue(sumCell, 'Тело',             /Вознаграждение|Сумма продл|Штраф|Депозит|Итого|\n|$/);
             data.total = extractValue(sumCell, 'Итого на сегодня', /\n|$/);
         }
 
@@ -139,18 +139,53 @@
     }
 
     // ── Status colour ────────────────────────────────────────────────────────
+    //
+    // Status names are exact values from "Название статуса на бэке" column
+    // in export.csv (loan section only). Grouped by visual severity:
+    //
+    // RED    — terminal/problematic: просроченный, судебные, КА, продан, аннулирован
+    // GREY   — successfully closed: кредит возвращен
+    // YELLOW — transient / awaiting: процесс выдачи, в обработке, ожидает коллектора
+    // GREEN  — currently active: активный кредит, продлен, в работе коллектора
+    // BLUE   — fallback for unknown values
+
+    const STATUS_RED = new Set([
+        'просроченный',
+        'аннулирован',
+        'продан',
+        'подготовка к продаже',
+        'инициирована судебная работа',
+        'в судебной работе',
+        'судебная работа завершена',
+        'исполнительное производство',
+        'в работе ка',
+    ]);
+
+    const STATUS_GREY = new Set([
+        'кредит возвращен',
+    ]);
+
+    const STATUS_YELLOW = new Set([
+        'процесс выдачи',
+        'в обработке',
+        'неудачная обработка',
+        'ожидает назначение коллектора',
+    ]);
+
+    const STATUS_GREEN = new Set([
+        'активный кредит',
+        'продлен',
+        'в работе коллектора',
+    ]);
 
     function statusColor(status) {
         if (!status) return null;
-        const s = status.toLowerCase();
-        if (/просроч|дефолт|цесси|продан|списан|банкрот|аннулир|отказ|расторг/.test(s))
-            return { bg: '#f2dede', fg: '#a94442', bd: '#ebccd1' };
-        if (/закрыт|погаш|выплач|завершён|завершен|возвращ/.test(s))
-            return { bg: '#e7e7e7', fg: '#555',    bd: '#d0d0d0' };
-        if (/ожид|обработ|рассмотр|заявк|на проверк|пролонг/.test(s))
-            return { bg: '#fcf8e3', fg: '#8a6d3b', bd: '#faebcc' };
-        if (/активн|выдан|действ|коллект/.test(s))
-            return { bg: '#dff0d8', fg: '#3c763d', bd: '#d6e9c6' };
+        const s = status.trim().toLowerCase();
+        if (STATUS_RED.has(s))    return { bg: '#f2dede', fg: '#a94442', bd: '#ebccd1' };
+        if (STATUS_GREY.has(s))   return { bg: '#e7e7e7', fg: '#555555', bd: '#d0d0d0' };
+        if (STATUS_YELLOW.has(s)) return { bg: '#fcf8e3', fg: '#8a6d3b', bd: '#faebcc' };
+        if (STATUS_GREEN.has(s))  return { bg: '#dff0d8', fg: '#3c763d', bd: '#d6e9c6' };
+        // fallback — blue for any status not yet catalogued
         return { bg: '#d9edf7', fg: '#31708f', bd: '#bce8f1' };
     }
 
@@ -220,9 +255,8 @@
 
     // ── Cache & data loading ─────────────────────────────────────────────────
 
-    // _v37 suffix intentionally busts sessionStorage entries written by older versions
-    // that cached status:null due to the textContent concatenation bug
-    const CACHE_KEY = 'cs_loan_' + loanId + '_v37';
+    // _v38 suffix busts sessionStorage entries from older versions
+    const CACHE_KEY = 'cs_loan_' + loanId + '_v38';
     const CACHE_TTL = 300 * 1000; // 5 minutes
 
     // hasTable anchors on "Статус" which is present in ALL loan layouts
