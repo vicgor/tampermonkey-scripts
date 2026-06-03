@@ -1,16 +1,37 @@
 // ==UserScript==
 // @name         CreditSmile — Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      3.4
+// @version      3.5
 // @description  Полноширинная строка под навбаром с информацией о займе + цветной статус
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*
+// @match        https://agis.creditsmile.ru/admin/agis2/core/loan-overdue/*
+// @match        https://agis.creditsmile.ru/admin/agis2/core/loan-judicial-recovery/*
+// @match        https://agis.creditsmile.ru/admin/agis2/core/loan-collection-agency/*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*
+// @match        https://agis.volgazaim.ru/admin/agis2/core/loan-overdue/*
+// @match        https://agis.volgazaim.ru/admin/agis2/core/loan-judicial-recovery/*
+// @match        https://agis.volgazaim.ru/admin/agis2/core/loan-collection-agency/*
 // @match        https://agis.moneymania.ru/admin/agis2/core/loan/*
+// @match        https://agis.moneymania.ru/admin/agis2/core/loan-overdue/*
+// @match        https://agis.moneymania.ru/admin/agis2/core/loan-judicial-recovery/*
+// @match        https://agis.moneymania.ru/admin/agis2/core/loan-collection-agency/*
 // @match        https://agis.berrycash.ru/admin/agis2/core/loan/*
+// @match        https://agis.berrycash.ru/admin/agis2/core/loan-overdue/*
+// @match        https://agis.berrycash.ru/admin/agis2/core/loan-judicial-recovery/*
+// @match        https://agis.berrycash.ru/admin/agis2/core/loan-collection-agency/*
 // @match        https://agis.credit7.ru/admin/agis2/core/loan/*
+// @match        https://agis.credit7.ru/admin/agis2/core/loan-overdue/*
+// @match        https://agis.credit7.ru/admin/agis2/core/loan-judicial-recovery/*
+// @match        https://agis.credit7.ru/admin/agis2/core/loan-collection-agency/*
 // @match        https://agis.belkacredit.ru/admin/agis2/core/loan/*
+// @match        https://agis.belkacredit.ru/admin/agis2/core/loan-overdue/*
+// @match        https://agis.belkacredit.ru/admin/agis2/core/loan-judicial-recovery/*
+// @match        https://agis.belkacredit.ru/admin/agis2/core/loan-collection-agency/*
 // @match        https://agis.credit365.ru/admin/agis2/core/loan/*
+// @match        https://agis.credit365.ru/admin/agis2/core/loan-overdue/*
+// @match        https://agis.credit365.ru/admin/agis2/core/loan-judicial-recovery/*
+// @match        https://agis.credit365.ru/admin/agis2/core/loan-collection-agency/*
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
@@ -18,8 +39,12 @@
 (function () {
     'use strict';
 
-    const loanId = (location.pathname.match(/\/loan\/(\d+)\b/) || [])[1];
+    // покрывает: /loan/123, /loan-overdue/123, /loan-judicial-recovery/123, /loan-collection-agency/123
+    const loanId = (location.pathname.match(/\/loan(?:-[\w-]+)?\/(\d+)\b/) || [])[1];
     if (!loanId) return;
+
+    // сегмент пути до ID, нужен для резервного fetch в getData()
+    const loanPath = (location.pathname.match(/(\/admin\/agis2\/core\/loan(?:-[\w-]+)?)\//)[1]);
 
     // --- Парсинг -----------------------------------------------------------
 
@@ -49,8 +74,8 @@
 
         const sumCell = getRowValue(doc, /^Сумма$/);
         if (sumCell) {
-            d.telo     = extract(sumCell, 'Тело', /Вознаграждение|Сумма продл|Штраф|Депозит|Итого|\n|$/);
-            d.itogo    = extract(sumCell, 'Итого на сегодня', /\n|$/);
+            d.telo  = extract(sumCell, 'Тело', /Вознаграждение|Сумма продл|Штраф|Депозит|Итого|\n|$/);
+            d.itogo = extract(sumCell, 'Итого на сегодня', /\n|$/);
         }
 
         const dateCell = getRowValue(doc, /^Дата$/);
@@ -80,7 +105,7 @@
             return { bg: '#e7e7e7', fg: '#555', bd: '#d0d0d0' };
         if (/ожид|обработ|рассмотр|заявк|на проверк|пролонг/.test(s))
             return { bg: '#fcf8e3', fg: '#8a6d3b', bd: '#faebcc' };
-        if (/активн|выдан|действ/.test(s))
+        if (/активн|выдан|действ|коллект/.test(s))
             return { bg: '#dff0d8', fg: '#3c763d', bd: '#d6e9c6' };
         return { bg: '#d9edf7', fg: '#31708f', bd: '#bce8f1' };
     }
@@ -120,18 +145,17 @@
 
         const bar = document.createElement('div');
         bar.id = 'cs-loan-bar';
-        // style: Object.assign вместо array.join — стандартный и более читаемый способ
         Object.assign(bar.style, {
-            width:          '100%',
-            boxSizing:      'border-box',
-            display:        'flex',
-            flexWrap:       'wrap',
-            alignItems:     'center',
-            padding:        '6px 16px',
-            background:     '#eef3f8',
-            borderTop:      '1px solid #d6e0ea',
-            borderBottom:   '1px solid #d6e0ea',
-            fontFamily:     'system-ui,Arial,sans-serif',
+            width:        '100%',
+            boxSizing:    'border-box',
+            display:      'flex',
+            flexWrap:     'wrap',
+            alignItems:   'center',
+            padding:      '6px 16px',
+            background:   '#eef3f8',
+            borderTop:    '1px solid #d6e0ea',
+            borderBottom: '1px solid #d6e0ea',
+            fontFamily:   'system-ui,Arial,sans-serif',
         });
 
         bar.innerHTML =
@@ -181,7 +205,8 @@
         const cached = fromCache();
         if (cached) return cached;
         try {
-            const resp = await fetch(`/admin/agis2/core/loan/${loanId}/edit`, { credentials: 'include' });
+            // резервный URL строится из фактического сегмента пути (не хардкодим "/loan")
+            const resp = await fetch(`${loanPath}/${loanId}/edit`, { credentials: 'include' });
             if (!resp.ok) return null;
             const doc = new DOMParser().parseFromString(await resp.text(), 'text/html');
             const d = parseDoc(doc);
