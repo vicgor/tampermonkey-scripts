@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CreditSmile — Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      3.6
+// @version      3.7
 // @description  Полноширинная строка под навбаром с информацией о займе + цветной статус
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*
@@ -39,84 +39,106 @@
 (function () {
     'use strict';
 
-    // покрывает: /loan/123, /loan-overdue/123, /loan-judicial-recovery/123, /loan-collection-agency/123
-    const loanId = (location.pathname.match(/\/loan(?:-[\w-]+)?\/(\d+)\b/) || [])[1];
+    // covers: /loan/123, /loan-overdue/123, /loan-judicial-recovery/123, /loan-collection-agency/123
+    const loanId   = (location.pathname.match(/\/loan(?:-[\w-]+)?\/(\d+)\b/) || [])[1];
     if (!loanId) return;
 
-    // сегмент пути до ID, нужен для резервного fetch в getData()
+    // path segment up to the ID — used for fallback fetch in getData()
     const loanPath = (location.pathname.match(/(\/admin\/agis2\/core\/loan(?:-[\w-]+)?)\//)[1]);
 
-    // --- Парсинг -----------------------------------------------------------
+    // ── Parsing ─────────────────────────────────────────────────────────────
 
     /**
-     * @param {Document} doc
+     * Find a <th> matching labelRegex and return the text of its sibling <td>.
+     * @param {Document|Element} doc
      * @param {RegExp} labelRegex
      * @param {boolean} [firstTextOnly=false]
-     *   true  — возвращает только первый непустой Text-узел <td>.
-     *   Используется для статуса: ячейка содержит <br> и <span> с доп.информацией,
-     *   которые textContent склеивает без пробела — регессия от замены innerText → textContent.
-     *   false — возвращает полный textContent всех дочерних узлов (default).
+     *   true  — returns only the first non-empty Text node of <td> (before any <br>/<span>).
+     *           Used for "Статус" whose cell contains extra <span> tags that textContent
+     *           would concatenate without spaces (regression from innerText → textContent).
+     *   false — returns full normalised textContent of all child nodes (default).
      */
     function getRowValue(doc, labelRegex, firstTextOnly = false) {
-        const ths = doc.querySelectorAll('th');
-        for (const th of ths) {
+        const headers = doc.querySelectorAll('th');
+        for (const th of headers) {
             if (labelRegex.test(th.textContent.trim())) {
-                const td = th.parentElement.querySelector('td');
-                if (!td) continue;
+                const cell = th.parentElement.querySelector('td');
+                if (!cell) continue;
                 if (firstTextOnly) {
-                    // берём только первый непустой Text-узел — то, что идёт до <br> или вложенных <span>
-                    for (const node of td.childNodes) {
+                    for (const node of cell.childNodes) {
                         if (node.nodeType === Node.TEXT_NODE) {
-                            const t = node.textContent.trim();
-                            if (t) return t;
+                            const text = node.textContent.trim();
+                            if (text) return text;
                         }
                     }
                     return null;
                 }
-                return td.textContent.replace(/\s+/g, ' ').trim();
+                return cell.textContent.replace(/\s+/g, ' ').trim();
             }
         }
         return null;
     }
 
-    function extract(text, key, stopRegex) {
+    /**
+     * Extract a value from a normalised text string between key and stopRegex.
+     * @param {string|null} text
+     * @param {string} key       — literal start marker
+     * @param {RegExp} stopRegex — pattern that marks end of value
+     */
+    function extractValue(text, key, stopRegex) {
         if (!text) return null;
         const idx = text.indexOf(key);
         if (idx === -1) return null;
         let rest = text.slice(idx + key.length);
-        const m = rest.match(stopRegex);
-        if (m && m.index !== undefined && m.index > 0) rest = rest.slice(0, m.index);
-        return rest.trim().replace(/^[:\s]+/, '');
+        const match = rest.match(stopRegex);
+        if (match && match.index > 0) rest = rest.slice(0, match.index);
+        return rest.trim().replace(/^[:\s]+/, '') || null;
     }
 
+    /** Parse all required fields from a document (current page or fetched /edit). */
     function parseDoc(doc) {
-        const d = {};
+        const data = {};
 
+        // ── PayDay layout: field "Сумма" ────────────────────────────────────
         const sumCell = getRowValue(doc, /^Сумма$/);
         if (sumCell) {
-            d.telo  = extract(sumCell, 'Тело', /Вознаграждение|Сумма продл|Штраф|Депозит|Итого|\n|$/);
-            d.itogo = extract(sumCell, 'Итого на сегодня', /\n|$/);
+            data.body  = extractValue(sumCell, 'Тело',            /Вознаграждение|Сумма продл|Штраф|Депозит|Итого|\n|$/);
+            data.total = extractValue(sumCell, 'Итого на сегодня', /\n|$/);
         }
 
+        // ── Installment layout: no "Сумма" field ────────────────────────────
+        if (!data.body) {
+            const contractInfo = getRowValue(doc, /^Общая информация по займу$/);
+            if (contractInfo)
+                data.body = extractValue(contractInfo, 'Сумма по договору:', /Срок|Количество|Ставка|Платеж|\n|$/);
+        }
+        if (!data.total) {
+            const currentInfo = getRowValue(doc, /^Текущая информация по займу$/);
+            if (currentInfo)
+                data.total = extractValue(currentInfo, 'Итого задолженность:', /ДС на счету|\n|$/);
+        }
+
+        // ── Date field (shared by both layouts) ─────────────────────────────
         const dateCell = getRowValue(doc, /^Дата$/);
         if (dateCell) {
-            d.vydan      = extract(dateCell, 'Выдан:', /Время выдачи|До:|Продлен|Итого|Просрочен|\n|$/);
-            d.doDate     = extract(dateCell, 'До:', /Продлен|Итого|Просрочен|\n|$/);
-            d.srok       = extract(dateCell, 'Итого:', /Просрочен|\n|$/);
-            d.prosrochka = extract(dateCell, 'Просрочен на:', /\n|$/);
-            d.prodlenDo  = extract(dateCell, 'до:', /Итого|Просрочен|\n|$/);
+            data.issuedOn    = extractValue(dateCell, 'Выдан:',        /Время выдачи|До:|Продлен|Итого|Просрочен|\n|$/);
+            data.dueDate     = extractValue(dateCell, 'До:',           /Продлен|Итого|Просрочен|\n|$/);
+            data.totalTerm   = extractValue(dateCell, 'Итого:',        /Просрочен|\n|$/);
+            data.overdueDays = extractValue(dateCell, 'Просрочен на:', /\n|$/);
+            data.extendedTo  = extractValue(dateCell, 'до:',           /Итого|Просрочен|\n|$/);
         }
 
-        d.priceList = getRowValue(doc, /^Прайслист$/);
-        d.tip       = getRowValue(doc, /^Тип$/);
-        // firstTextOnly=true: берём только головный текст до <br>/<span>,
-        // чтобы не сливать воедино «Активный кредитНачисления остановлены...»
-        d.status    = getRowValue(doc, /^Статус\b/, true);
+        data.priceList = getRowValue(doc, /^Прайслист$/);
+        data.loanType  = getRowValue(doc, /^Тип$/);
 
-        return d;
+        // firstTextOnly=true: take only the leading text node before <br>/<span>
+        // so "Активный кредит" is not merged with "Начисления остановлены ..."
+        data.status = getRowValue(doc, /^Статус\b/, true);
+
+        return data;
     }
 
-    // --- Цвет статуса ------------------------------------------------------
+    // ── Status colour ────────────────────────────────────────────────────────
 
     function statusColor(status) {
         if (!status) return null;
@@ -124,7 +146,7 @@
         if (/просроч|дефолт|цесси|продан|списан|банкрот|аннулир|отказ|расторг/.test(s))
             return { bg: '#f2dede', fg: '#a94442', bd: '#ebccd1' };
         if (/закрыт|погаш|выплач|завершён|завершен|возвращ/.test(s))
-            return { bg: '#e7e7e7', fg: '#555', bd: '#d0d0d0' };
+            return { bg: '#e7e7e7', fg: '#555',    bd: '#d0d0d0' };
         if (/ожид|обработ|рассмотр|заявк|на проверк|пролонг/.test(s))
             return { bg: '#fcf8e3', fg: '#8a6d3b', bd: '#faebcc' };
         if (/активн|выдан|действ|коллект/.test(s))
@@ -132,16 +154,16 @@
         return { bg: '#d9edf7', fg: '#31708f', bd: '#bce8f1' };
     }
 
-    // --- Рендер ------------------------------------------------------------
+    // ── Render ───────────────────────────────────────────────────────────────
 
-    function buildItem(label, val, highlight) {
-        if (!val) return '';
-        const lblColor = highlight ? '#d9534f' : '#8a96a3';
-        const valColor = highlight ? '#d9534f' : '#1c2733';
-        const valWeight = highlight ? '700' : '600';
+    function buildItem(label, value, highlight = false) {
+        if (!value) return '';
+        const labelColor = highlight ? '#d9534f' : '#8a96a3';
+        const valueColor = highlight ? '#d9534f' : '#1c2733';
+        const fontWeight = highlight ? '700'     : '600';
         return `<span style="display:inline-flex;flex-direction:column;margin:0 16px 0 0;line-height:1.15">
-            <span style="font-size:9px;color:${lblColor};text-transform:uppercase;letter-spacing:.4px">${label}</span>
-            <span style="font-size:12px;color:${valColor};font-weight:${valWeight}">${val}</span>
+            <span style="font-size:9px;color:${labelColor};text-transform:uppercase;letter-spacing:.4px">${label}</span>
+            <span style="font-size:12px;color:${valueColor};font-weight:${fontWeight}">${value}</span>
         </span>`;
     }
 
@@ -157,13 +179,13 @@
         </span>`;
     }
 
-    function render(d) {
-        if (!d) return;
+    function render(data) {
+        if (!data) return;
         const navbar = document.querySelector('.navbar-static-top');
         if (!navbar) return;
 
-        const old = document.getElementById('cs-loan-bar');
-        if (old) old.remove();
+        const existing = document.getElementById('cs-loan-bar');
+        if (existing) existing.remove();
 
         const bar = document.createElement('div');
         bar.id = 'cs-loan-bar';
@@ -181,59 +203,66 @@
         });
 
         bar.innerHTML =
-            buildStatusItem(d.status) +
-            buildItem('Выдан', d.vydan) +
-            buildItem('До', d.doDate) +
-            buildItem('Срок', d.srok) +
-            buildItem('Просрочка', d.prosrochka, !!d.prosrochka) +
-            buildItem('Продлен до', d.prodlenDo) +
-            buildItem('Тело', d.telo) +
-            buildItem('Итого', d.itogo) +
-            buildItem('Прайслист', d.priceList) +
-            buildItem('Тип', d.tip) +
-            buildItem('Займ', '#' + loanId);
+            buildStatusItem(data.status) +
+            buildItem('Выдан',      data.issuedOn) +
+            buildItem('До',         data.dueDate) +
+            buildItem('Срок',       data.totalTerm) +
+            buildItem('Просрочка',  data.overdueDays, !!data.overdueDays) +
+            buildItem('Продлен до', data.extendedTo) +
+            buildItem('Тело',       data.body) +
+            buildItem('Итого',      data.total) +
+            buildItem('Прайслист',  data.priceList) +
+            buildItem('Тип',        data.loanType) +
+            buildItem('Займ',       '#' + loanId);
 
         navbar.parentNode.insertBefore(bar, navbar.nextSibling);
     }
 
-    // --- Кэш и получение данных --------------------------------------------
+    // ── Cache & data loading ─────────────────────────────────────────────────
 
-    const CACHE_KEY = 'cs_loan_' + loanId;
-    const CACHE_TTL = 300 * 1000;
+    // _v37 suffix intentionally busts sessionStorage entries written by older versions
+    // that cached status:null due to the textContent concatenation bug
+    const CACHE_KEY = 'cs_loan_' + loanId + '_v37';
+    const CACHE_TTL = 300 * 1000; // 5 minutes
 
+    // hasTable anchors on "Статус" which is present in ALL loan layouts
+    // (PayDay, Installment, overdue, etc.) — unlike "Сумма"/"Дата" which
+    // are absent in the Installment layout
     function hasTable(doc) {
-        return !!getRowValue(doc, /^Дата$/) || !!getRowValue(doc, /^Сумма$/);
+        return !!getRowValue(doc, /^Статус\b/, true);
     }
 
-    function fromCache() {
+    function readCache() {
         try {
             const raw = sessionStorage.getItem(CACHE_KEY);
             if (!raw) return null;
-            const obj = JSON.parse(raw);
-            return (Date.now() - obj.t > CACHE_TTL) ? null : obj.d;
+            const entry = JSON.parse(raw);
+            return (Date.now() - entry.timestamp > CACHE_TTL) ? null : entry.data;
         } catch (e) { return null; }
     }
 
-    function toCache(d) {
-        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), d })); } catch (e) {}
+    function writeCache(data) {
+        try {
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data }));
+        } catch (e) {}
     }
 
     async function getData() {
         if (hasTable(document)) {
-            const d = parseDoc(document);
-            toCache(d);
-            return d;
+            const data = parseDoc(document);
+            writeCache(data);
+            return data;
         }
-        const cached = fromCache();
+        const cached = readCache();
         if (cached) return cached;
         try {
-            // резервный URL строится из фактического сегмента пути (не хардкодим "/loan")
+            // fallback fetch uses actual path segment, not hardcoded "/loan"
             const resp = await fetch(`${loanPath}/${loanId}/edit`, { credentials: 'include' });
             if (!resp.ok) return null;
-            const doc = new DOMParser().parseFromString(await resp.text(), 'text/html');
-            const d = parseDoc(doc);
-            toCache(d);
-            return d;
+            const fetchedDoc = new DOMParser().parseFromString(await resp.text(), 'text/html');
+            const data = parseDoc(fetchedDoc);
+            writeCache(data);
+            return data;
         } catch (e) { return null; }
     }
 
