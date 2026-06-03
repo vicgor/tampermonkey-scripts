@@ -1,105 +1,166 @@
 // ==UserScript==
 // @name         Robust Core Template
-// @namespace    http://tampermonkey.net/
-// @version      0.1
-// @description  Устойчивое ядро: ожидание DOM, GM_xmlhttpRequest, debounced GM_setValue, SPA-навигация, cleanup
+// @namespace    domain.feature        // <- заменить: например agis.loaninfo
+// @version      0.2
+// @description  Устойчивое ядро: ожидание DOM, GM_xmlhttpRequest, debounced GM_setValue, SPA-навигация, routeToken, cleanup
 // @author       me
-// @match        https://example.com/path/*
+// @match        https://example.com/path/*    // <- заменить на реальный домен
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=example.com
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
-// @connect      example.com
+// @connect      example.com            // <- по одному @connect на каждый хост, не *
 // ==/UserScript==
 
 (() => {
   'use strict';
 
-  // --- Настройки и состояние ---
-  const SCRIPT_NS = 'robust-core';
-  const DEBUG = true;
-  const state = { started: false, observers: new Set(), saveTimers: new Map() };
+  // --- Настройки ---
+  const SCRIPT_NS  = 'robust-core';   // <- заменить
+  const DEBUG      = true;
+  const WAIT_TIMEOUT = 15000;
 
-  const log = (...a) => { if (DEBUG) console.log(`[${SCRIPT_NS}]`, ...a); };
+  const log  = (...a) => { if (DEBUG) console.log(`[${SCRIPT_NS}]`, ...a); };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
 
-  // --- Хранилище: GM_setValue с дебаунсом, GM_getValue с fallback ---
+  // --- Трекинг всех observerов и таймеров ---
+  const observers = new Set();
+  const timers    = new Set();
+  const storageTimers = new Map();
+
+  // routeToken — инкрементируется при каждом SPA-переходе.
+  // После каждого await проверяй: if (token !== routeToken) return;
+  let routeToken = 0;
+  let lastUrl    = location.href;
+
+  // setTimeout, который регистрируется в наборе и авто-удаляется по завершении
+  function setManagedTimeout(callback, delay) {
+    const timer = setTimeout(() => { timers.delete(timer); callback(); }, delay);
+    timers.add(timer);
+    return timer;
+  }
+
+  // cleanupRoute — вызывай при каждом SPA-переходе.
+  // Чистит observerы и таймеры текущего маршрута, не трогая сторадж-таймеры.
+  function cleanupRoute() {
+    for (const o of observers) o.disconnect();
+    observers.clear();
+    for (const t of timers) clearTimeout(t);
+    timers.clear();
+  }
+
+  // cleanup — полная очистка при выгрузке страницы.
+  function cleanup() {
+    cleanupRoute();
+    for (const t of storageTimers.values()) clearTimeout(t);
+    storageTimers.clear();
+    log('Очистка завершена');
+  }
+
+  // --- Хранилище ---
   // GM_setValue/GM_getValue в MV3 трактуем как асинхронные: await + try/catch.
-  const debounceGMSetValue = (key, delay = 300) => (value) => {
-    const prev = state.saveTimers.get(key);
-    if (prev) clearTimeout(prev);
+  async function storageGet(key, fallback = null) {
+    try {
+      const v = await GM_getValue(key, fallback);
+      return v === undefined ? fallback : v;
+    } catch (e) { warn('GM_getValue ошибка:', key, e); return fallback; }
+  }
+
+  // Частые записи через debounce — защита от избыточных write-запросов к GM
+  function storageSetDebounced(key, value, wait = 300) {
+    const old = storageTimers.get(key);
+    if (old) clearTimeout(old);
     const timer = setTimeout(async () => {
-      try { await GM_setValue(key, value); log('Сохранено:', key); }
-      catch (e) { warn('Ошибка GM_setValue:', key, e); }
-      finally { state.saveTimers.delete(key); }
-    }, delay);
-    state.saveTimers.set(key, timer);
-  };
+      storageTimers.delete(key);
+      try { await GM_setValue(key, value); }
+      catch (e) { warn('GM_setValue ошибка:', key, e); }
+    }, wait);
+    storageTimers.set(key, timer);
+  }
 
-  const storage = {
-    async get(key, fallback = null) {
-      try { return await GM_getValue(key, fallback); }
-      catch (e) { warn('Ошибка GM_getValue:', key, e); return fallback; }
-    },
-    setDebounced: debounceGMSetValue,
-  };
+  // --- DOM-ожидание ---
+  // @run-at document-start = ранний момент инъекции, не готовность DOM.
+  // Работа с элементами — всегда через waitForElement.
+  function waitForElement(selector, { root = document, timeout = WAIT_TIMEOUT } = {}) {
+    return new Promise((resolve, reject) => {
+      let done = false;
+      let observer = null;
 
-  // --- Ожидание элемента через MutationObserver (не устаревшие mutation events) ---
-  // @run-at document-start даёт лишь самый ранний момент инъекции, элементов может ещё не быть.
-  const waitForElement = (selector, { root = document, timeout = 15000 } = {}) =>
-    new Promise((resolve, reject) => {
-      const found = root.querySelector(selector);
-      if (found) return resolve(found);
-      const observer = new MutationObserver(() => {
-        const el = root.querySelector(selector);
-        if (el) { observer.disconnect(); state.observers.delete(observer); resolve(el); }
-      });
-      state.observers.add(observer);
-      observer.observe(root === document ? document.documentElement : root,
-        { childList: true, subtree: true });
-      setTimeout(() => {
-        observer.disconnect(); state.observers.delete(observer);
-        reject(new Error(`Таймаут ожидания: ${selector}`));
-      }, timeout);
+      const query = () => { try { return root.querySelector(selector); } catch (_) { return null; } };
+
+      const finish = (el) => {
+        if (done) return; done = true;
+        if (observer) { observer.disconnect(); observers.delete(observer); }
+        clearTimeout(timeoutTimer); timers.delete(timeoutTimer);
+        resolve(el);
+      };
+      const fail = () => {
+        if (done) return; done = true;
+        if (observer) { observer.disconnect(); observers.delete(observer); }
+        warn(`waitForElement: "${selector}" не найден за ${timeout} мс (${location.href})`);
+        reject(new Error(`waitForElement: "${selector}" not found`));
+      };
+
+      const existing = query();
+      if (existing) { resolve(existing); return; }
+
+      const timeoutTimer = setManagedTimeout(fail, timeout);
+
+      // Если documentElement ещё нет (ранний document-start) — повторяем через 50 мс
+      const startObserve = () => {
+        if (done) return;
+        const observeRoot = root === document
+          ? (document.documentElement || document.body)
+          : root;
+        if (!observeRoot) { setManagedTimeout(startObserve, 50); return; }
+        observer = new MutationObserver(() => { const el = query(); if (el) finish(el); });
+        observer.observe(observeRoot, { childList: true, subtree: true });
+        observers.add(observer);
+        const el = query(); if (el) finish(el); // проверяем сразу после подписки
+      };
+      startObserve();
     });
+  }
 
-  // --- Обработка динамически добавляемых элементов (списки, SPA-контент) ---
-  const observeAddedElements = (selector, callback, { root = document.documentElement } = {}) => {
+  // Вызывает callback для каждого нового подходящего элемента
+  function observeAddedElements(selector, callback, { root = document.documentElement } = {}) {
     const seen = new WeakSet();
     const process = (node) => {
       if (!(node instanceof Element)) return;
-      const matched = [];
-      if (node.matches?.(selector)) matched.push(node);
-      matched.push(...(node.querySelectorAll?.(selector) || []));
-      for (const el of matched) { if (seen.has(el)) continue; seen.add(el); callback(el); }
+      if (node.matches?.(selector) && !seen.has(node)) { seen.add(node); callback(node); }
+      for (const el of (node.querySelectorAll?.(selector) || [])) {
+        if (!seen.has(el)) { seen.add(el); callback(el); }
+      }
     };
     process(root);
     const observer = new MutationObserver((muts) => {
       for (const m of muts) for (const n of m.addedNodes) process(n);
     });
     observer.observe(root, { childList: true, subtree: true });
-    state.observers.add(observer);
+    observers.add(observer);
     return observer;
-  };
+  }
 
-  const onDomReady = (cb) => {
-    if (document.readyState === 'interactive' || document.readyState === 'complete') return cb();
+  function onDomReady(cb) {
+    if (document.readyState === 'interactive' || document.readyState === 'complete') { cb(); return; }
     document.addEventListener('DOMContentLoaded', cb, { once: true });
-  };
+  }
 
-  // --- Сетевые запросы через GM_xmlhttpRequest (обходит жёсткий CSP сайта) ---
-  // Домены должны быть перечислены в @connect.
-  const httpRequest = (details) => new Promise((resolve, reject) => {
-    GM_xmlhttpRequest({
-      timeout: 20000, ...details,
-      onload: resolve,
-      onerror: reject,
-      ontimeout: () => reject(new Error('GM_xmlhttpRequest timeout')),
-      onabort: () => reject(new Error('GM_xmlhttpRequest aborted')),
+  // --- Сетевые запросы через GM_xmlhttpRequest (обходит CSP сайта) ---
+  // Домены должны быть перечислены в @connect по одному на каждый хост.
+  function httpRequest(details) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        timeout: 20000, ...details,
+        onload:   resolve,
+        onerror:  reject,
+        ontimeout: () => reject(new Error('GM_xmlhttpRequest timeout')),
+        onabort:   () => reject(new Error('GM_xmlhttpRequest aborted')),
+      });
     });
-  });
+  }
 
   const api = {
     async getJson(url, headers = {}) {
@@ -108,6 +169,7 @@
         headers: { 'Accept': 'application/json, text/plain, */*', ...headers },
         responseType: 'json',
       });
+      if (r.status !== 200) throw new Error(`getJson: HTTP ${r.status} ${url}`);
       return { status: r.status, data: r.response, finalUrl: r.finalUrl || url };
     },
     async postJson(url, body, headers = {}) {
@@ -116,56 +178,55 @@
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', ...headers },
         data: JSON.stringify(body), responseType: 'json',
       });
+      if (r.status !== 200) throw new Error(`postJson: HTTP ${r.status} ${url}`);
       return { status: r.status, data: r.response, finalUrl: r.finalUrl || url };
     },
   };
 
-  // --- SPA-навигация: перехват pushState/replaceState + popstate ---
-  const onUrlChange = (callback) => {
-    let lastUrl = location.href;
-    const wrap = (type) => {
-      const orig = history[type];
-      return function (...args) {
-        const res = orig.apply(this, args);
-        window.dispatchEvent(new Event('spa:navigation'));
-        return res;
-      };
+  // --- SPA-навигация ---
+  // Перехватывает pushState/replaceState + popstate + hashchange.
+  // debounce 100 мс — защита от двойного срабатывания при replaceState+pushState подряд.
+  function onUrlChange(callback) {
+    let debounceTimer = null;
+    const check = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        if (location.href === lastUrl) return;
+        lastUrl = location.href;
+        callback(lastUrl);
+      }, 100);
     };
-    history.pushState = wrap('pushState');
-    history.replaceState = wrap('replaceState');
-    const handler = () => {
-      if (location.href !== lastUrl) { lastUrl = location.href; callback(lastUrl); }
-    };
-    window.addEventListener('spa:navigation', handler);
-    window.addEventListener('popstate', handler);
-  };
+
+    const origPush    = history.pushState;
+    const origReplace = history.replaceState;
+    history.pushState    = function (...a) { const r = origPush.apply(this, a);    check(); return r; };
+    history.replaceState = function (...a) { const r = origReplace.apply(this, a); check(); return r; };
+    window.addEventListener('popstate',   check);
+    window.addEventListener('hashchange', check);
+  }
 
   // --- Точка входа ---
-  const bootstrap = async () => {
-    if (state.started) return;
-    state.started = true;
+  async function bootstrap() {
     log('Инициализация');
 
-    storage.setDebounced('lastRunAt', 500)(Date.now());
-
     onDomReady(async () => {
-      try { await waitForElement('body'); log('DOM готов'); }
-      catch (e) { warn(e.message); }
-      // TODO: здесь основная логика скрипта
+      const token = ++routeToken;
+      try {
+        await waitForElement('body');
+        if (token !== routeToken) return; // маршрут сменился пока ждали
+        log('DOM готов');
+        // TODO: здесь основная логика скрипта
+      } catch (e) { warn(e.message); }
     });
 
-    // Переинициализация логики при смене route в SPA
-    onUrlChange((url) => { log('SPA-навигация:', url); /* TODO: re-init */ });
-  };
+    // Переинициализация при SPA-переходе
+    onUrlChange((url) => {
+      log('SPA-переход:', url);
+      cleanupRoute();
+      // TODO: здесь переинициализация логики
+    });
+  }
 
-  const cleanup = () => {
-    for (const t of state.saveTimers.values()) clearTimeout(t);
-    state.saveTimers.clear();
-    for (const o of state.observers) o.disconnect();
-    state.observers.clear();
-    log('Очистка завершена');
-  };
-
-  window.addEventListener('beforeunload', cleanup, { once: true });
+  window.addEventListener('pagehide', cleanup, { once: true });
   bootstrap().catch(e => console.error(`[${SCRIPT_NS}] Критическая ошибка`, e));
 })();
