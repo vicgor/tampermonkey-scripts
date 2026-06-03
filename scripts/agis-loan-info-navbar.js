@@ -1,317 +1,714 @@
 // ==UserScript==
 // @name         CreditSmile — Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      3.9
-// @description  Полноширинная строка под навбаром с информацией о займе + цветной статус
+// @version      4.0
+// @description  Полноширинная строка под навбаром с информацией о займе и цветным статусом
 // @icon         https://agis.creditsmile.ru/favicon.ico
-// @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*
-// @match        https://agis.creditsmile.ru/admin/agis2/core/loan-overdue/*
-// @match        https://agis.creditsmile.ru/admin/agis2/core/loan-judicial-recovery/*
-// @match        https://agis.creditsmile.ru/admin/agis2/core/loan-collection-agency/*
-// @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*
-// @match        https://agis.volgazaim.ru/admin/agis2/core/loan-overdue/*
-// @match        https://agis.volgazaim.ru/admin/agis2/core/loan-judicial-recovery/*
-// @match        https://agis.volgazaim.ru/admin/agis2/core/loan-collection-agency/*
-// @match        https://agis.moneymania.ru/admin/agis2/core/loan/*
-// @match        https://agis.moneymania.ru/admin/agis2/core/loan-overdue/*
-// @match        https://agis.moneymania.ru/admin/agis2/core/loan-judicial-recovery/*
-// @match        https://agis.moneymania.ru/admin/agis2/core/loan-collection-agency/*
-// @match        https://agis.berrycash.ru/admin/agis2/core/loan/*
-// @match        https://agis.berrycash.ru/admin/agis2/core/loan-overdue/*
-// @match        https://agis.berrycash.ru/admin/agis2/core/loan-judicial-recovery/*
-// @match        https://agis.berrycash.ru/admin/agis2/core/loan-collection-agency/*
-// @match        https://agis.credit7.ru/admin/agis2/core/loan/*
-// @match        https://agis.credit7.ru/admin/agis2/core/loan-overdue/*
-// @match        https://agis.credit7.ru/admin/agis2/core/loan-judicial-recovery/*
-// @match        https://agis.credit7.ru/admin/agis2/core/loan-collection-agency/*
-// @match        https://agis.belkacredit.ru/admin/agis2/core/loan/*
-// @match        https://agis.belkacredit.ru/admin/agis2/core/loan-overdue/*
-// @match        https://agis.belkacredit.ru/admin/agis2/core/loan-judicial-recovery/*
-// @match        https://agis.belkacredit.ru/admin/agis2/core/loan-collection-agency/*
-// @match        https://agis.credit365.ru/admin/agis2/core/loan/*
-// @match        https://agis.credit365.ru/admin/agis2/core/loan-overdue/*
-// @match        https://agis.credit365.ru/admin/agis2/core/loan-judicial-recovery/*
-// @match        https://agis.credit365.ru/admin/agis2/core/loan-collection-agency/*
-// @grant        none
-// @run-at       document-idle
+// @match        https://agis.creditsmile.ru/admin/agis2/core/loan*
+// @match        https://agis.credit7.ru/admin/agis2/core/loan*
+// @match        https://agis.belkacredit.ru/admin/agis2/core/loan*
+// @match        https://agis.berrycash.ru/admin/agis2/core/loan*
+// @match        https://agis.credit365.ru/admin/agis2/core/loan*
+// @match        https://agis.volgazaim.ru/admin/agis2/core/loan*
+// @match        https://agis.moneymania.ru/admin/agis2/core/loan*
+// @run-at       document-start
+// @sandbox      DOM
+// @grant        GM_getValue
+// @grant        GM_setValue
 // ==/UserScript==
 
 (function () {
     'use strict';
 
-    // covers: /loan/123, /loan-overdue/123, /loan-judicial-recovery/123, /loan-collection-agency/123
-    const loanId   = (location.pathname.match(/\/loan(?:-[\w-]+)?\/(\d+)\b/) || [])[1];
-    if (!loanId) return;
+    const SCRIPT_NAME = 'CreditSmileLoanInfo';
+    const BAR_ID = 'cs-loan-bar';
+    const NAVBAR_SELECTOR = '.navbar-static-top';
+    const CACHE_TTL = 5 * 60 * 1000;
+    const CACHE_VERSION = 'v40';
+    const WAIT_TIMEOUT = 20000;
 
-    // path segment up to the ID — used for fallback fetch
-    const loanPath = (location.pathname.match(/(\/admin\/agis2\/core\/loan(?:-[\w-]+)?)\//)[1]);
+    let routeToken = 0;
+    let lastUrl = location.href;
+    let lastRenderSignature = '';
 
-    // ── Parsing ─────────────────────────────────────────────────────────────
-
-    /**
-     * Find a <th> matching labelRegex and return the text of its sibling <td>.
-     * @param {Document|Element} doc
-     * @param {RegExp} labelRegex
-     * @param {boolean} [firstTextOnly=false]
-     *   true  — returns only the first non-empty Text node of <td> (before any <br>/<span>).
-     *           Used for "Статус" whose cell may contain extra <span> tags
-     *           (e.g. "Начисления остановлены") that textContent concatenates without spaces.
-     *   false — returns full normalised textContent of all child nodes (default).
-     */
-    function getRowValue(doc, labelRegex, firstTextOnly = false) {
-        const headers = doc.querySelectorAll('th');
-        for (const th of headers) {
-            if (labelRegex.test(th.textContent.trim())) {
-                const cell = th.parentElement.querySelector('td');
-                if (!cell) continue;
-                if (firstTextOnly) {
-                    for (const node of cell.childNodes) {
-                        if (node.nodeType === Node.TEXT_NODE) {
-                            const text = node.textContent.trim();
-                            if (text) return text;
-                        }
-                    }
-                    return null;
-                }
-                return cell.textContent.replace(/\s+/g, ' ').trim();
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Extract a value from a normalised text string between key and stopRegex.
-     * @param {string|null} text
-     * @param {string} key       — literal start marker
-     * @param {RegExp} stopRegex — pattern that marks end of value
-     */
-    function extractValue(text, key, stopRegex) {
-        if (!text) return null;
-        const idx = text.indexOf(key);
-        if (idx === -1) return null;
-        let rest = text.slice(idx + key.length);
-        const match = rest.match(stopRegex);
-        if (match && match.index > 0) rest = rest.slice(0, match.index);
-        return rest.trim().replace(/^[:\s]+/, '') || null;
-    }
-
-    /** Parse all required fields from a document (show page or fetched /show). */
-    function parseDoc(doc) {
-        const data = {};
-
-        // ── PayDay layout: field "Сумма" ────────────────────────────────────
-        const sumCell = getRowValue(doc, /^Сумма$/);
-        if (sumCell) {
-            data.body  = extractValue(sumCell, 'Тело',             /Вознаграждение|Сумма продл|Штраф|Депозит|Итого|\n|$/);
-            data.total = extractValue(sumCell, 'Итого на сегодня', /\n|$/);
-        }
-
-        // ── Installment layout: no "Сумма" field ────────────────────────────
-        if (!data.body) {
-            const contractInfo = getRowValue(doc, /^Общая информация по займу$/);
-            if (contractInfo)
-                data.body = extractValue(contractInfo, 'Сумма по договору:', /Срок|Количество|Ставка|Платеж|\n|$/);
-        }
-        if (!data.total) {
-            const currentInfo = getRowValue(doc, /^Текущая информация по займу$/);
-            if (currentInfo)
-                data.total = extractValue(currentInfo, 'Итого задолженность:', /ДС на счету|\n|$/);
-        }
-
-        // ── Date field (shared by both layouts) ─────────────────────────────
-        const dateCell = getRowValue(doc, /^Дата$/);
-        if (dateCell) {
-            data.issuedOn    = extractValue(dateCell, 'Выдан:',        /Время выдачи|До:|Продлен|Итого|Просрочен|\n|$/);
-            data.dueDate     = extractValue(dateCell, 'До:',           /Продлен|Итого|Просрочен|\n|$/);
-            data.totalTerm   = extractValue(dateCell, 'Итого:',        /Просрочен|\n|$/);
-            data.overdueDays = extractValue(dateCell, 'Просрочен на:', /\n|$/);
-            data.extendedTo  = extractValue(dateCell, 'до:',           /Итого|Просрочен|\n|$/);
-        }
-
-        data.priceList = getRowValue(doc, /^Прайслист$/);
-        data.loanType  = getRowValue(doc, /^Тип$/);
-
-        // firstTextOnly=true: take only the leading text node before <br>/<span>
-        // so "Ожидает назначение коллектора" is not merged with "Начисления остановлены"
-        data.status = getRowValue(doc, /^Статус\b/, true);
-
-        return data;
-    }
-
-    // ── Status colour ────────────────────────────────────────────────────────
-    //
-    // Exact values from "Название статуса на бэке" column in export.csv.
-    // Covers both LOAN and APPLICATION status sections.
-    //
-    // RED    — terminal / problematic
-    // GREY   — successfully closed
-    // YELLOW — transient / pending
-    // GREEN  — currently active
-    // BLUE   — fallback for unlisted values
+    const observers = new Set();
+    const timers = new Set();
+    const storageTimers = new Map();
 
     const STATUS_RED = new Set([
-        // LOAN — overdue, judicial, collection
-        'просроченный',                       // STATUS_OVERDUE
-        'аннулирован',                         // STATUS_GONE
-        'продан',                              // STATUS_SOLD
-        'подготовка к продаже',           // STATUS_PRESALE
-        'инициирована судебная работа', // STATUS_JUDICIAL_RECOVERY_STARTING
-        'в судебной работе',               // STATUS_JUDICIAL_RECOVERY_IN_PROGRESS
-        'судебная работа завершена',     // STATUS_JUDICIAL_RECOVERY_FINISH
-        'исполнительное производство',   // STATUS_JUDICIAL_ENFORCEMENT_PROCEEDINGS
-        'в работе ка',                          // STATUS_COLLECTION_AGENCY_IN_PROGRESS
-        // APPLICATION — rejected/terminated
-        'отказано',                            // STATUS_DENIED
-        'отложен',                             // STATUS_TERMINATED
+        'просроченный',
+        'аннулирован',
+        'продан',
+        'подготовка к продаже',
+        'инициирована судебная работа',
+        'в судебной работе',
+        'судебная работа завершена',
+        'исполнительное производство',
+        'в работе ка',
     ]);
 
     const STATUS_GREY = new Set([
-        'кредит возвращен',                  // STATUS_RETURNED
+        'кредит возвращен',
     ]);
 
     const STATUS_YELLOW = new Set([
-        // LOAN — transient processing
-        'процесс выдачи',                    // STATUS_AUTO_GIVEOUT_IN_PROGRESS
-        'в обработке',                        // STATUS_PROCESSING
-        'неудачная обработка',              // STATUS_PROCESSING_FAIL
-        'ожидает назначение коллектора', // STATUS_AWAITING_COLLECTOR
-        // APPLICATION — pending / awaiting
-        'новая заявка',                      // STATUS_REQUEST
-        'заявка одобрена',                  // STATUS_CONFIRMED
-        'заявка подтверждена клиентом',  // STATUS_CUSTOMER_CONFIRMATION
-        'ожидает подтверждения от клиента', // STATUS_AWAITING_CUSTOMER_CONFIRMATION
-        'проблема верификации',           // STATUS_VERIFICATION_PROBLEM
-        'ожидание суммы от клиента',    // STATUS_AWAITING_CUSTOMER_AMOUNT
+        'процесс выдачи',
+        'в обработке',
+        'неудачная обработка',
+        'ожидает назначения коллектора',
+        'новая заявка',
+        'заявка одобрена',
+        'заявка подтверждена клиентом',
+        'ожидает подтверждения от клиента',
+        'проблема верификации',
+        'ожидание суммы от клиента',
     ]);
 
     const STATUS_GREEN = new Set([
-        'активный кредит',                    // STATUS_ACTIVE
-        'продлен',                             // STATUS_EXTENDED
-        'в работе коллектора',              // STATUS_COLLECTOR_IN_PROGRESS
+        'активный кредит',
+        'продлен',
+        'в работе коллектора',
     ]);
 
+    function setManagedTimeout(callback, delay) {
+        const timer = setTimeout(() => {
+            timers.delete(timer);
+            callback();
+        }, delay);
+
+        timers.add(timer);
+        return timer;
+    }
+
+    function cleanupRoute() {
+        for (const observer of observers) observer.disconnect();
+        observers.clear();
+
+        for (const timer of timers) clearTimeout(timer);
+        timers.clear();
+
+        lastRenderSignature = '';
+    }
+
+    function debounce(fn, wait = 250) {
+        let timer = null;
+
+        function debounced(...args) {
+            clearTimeout(timer);
+            timer = setTimeout(() => fn.apply(this, args), wait);
+        }
+
+        debounced.cancel = () => {
+            clearTimeout(timer);
+            timer = null;
+        };
+
+        return debounced;
+    }
+
+    async function storageGet(key, fallback = null) {
+        try {
+            const value = await GM_getValue(key, fallback);
+            return value === undefined ? fallback : value;
+        } catch (err) {
+            console.warn(`[${SCRIPT_NAME}] GM_getValue error:`, err);
+            return fallback;
+        }
+    }
+
+    function storageSetDebounced(key, value, wait = 300) {
+        const oldTimer = storageTimers.get(key);
+        if (oldTimer) clearTimeout(oldTimer);
+
+        const timer = setTimeout(async () => {
+            storageTimers.delete(key);
+
+            try {
+                await GM_setValue(key, value);
+            } catch (err) {
+                console.warn(`[${SCRIPT_NAME}] GM_setValue error:`, err);
+            }
+        }, wait);
+
+        storageTimers.set(key, timer);
+    }
+
+    function waitForElement(selector, { root = document, timeout = WAIT_TIMEOUT } = {}) {
+        return new Promise((resolve, reject) => {
+            let done = false;
+            let observer = null;
+
+            const query = () => {
+                try {
+                    return root.querySelector(selector);
+                } catch (_) {
+                    return null;
+                }
+            };
+
+            const finish = (element) => {
+                if (done) return;
+
+                done = true;
+
+                if (observer) {
+                    observer.disconnect();
+                    observers.delete(observer);
+                }
+
+                clearTimeout(timeoutTimer);
+                timers.delete(timeoutTimer);
+
+                resolve(element);
+            };
+
+            const fail = () => {
+                if (done) return;
+
+                done = true;
+
+                if (observer) {
+                    observer.disconnect();
+                    observers.delete(observer);
+                }
+
+                reject(new Error(`waitForElement: ${selector} not found`));
+            };
+
+            const existing = query();
+            if (existing) {
+                resolve(existing);
+                return;
+            }
+
+            const timeoutTimer = setManagedTimeout(fail, timeout);
+
+            const startObserve = () => {
+                if (done) return;
+
+                const observeRoot = root === document
+                    ? document.documentElement || document.body
+                    : root;
+
+                if (!observeRoot) {
+                    setManagedTimeout(startObserve, 50);
+                    return;
+                }
+
+                observer = new MutationObserver(() => {
+                    const element = query();
+                    if (element) finish(element);
+                });
+
+                observer.observe(observeRoot, {
+                    childList: true,
+                    subtree: true,
+                });
+
+                observers.add(observer);
+
+                const element = query();
+                if (element) finish(element);
+            };
+
+            startObserve();
+        });
+    }
+
+    function observeAddedElements(selector, callback, { root = document } = {}) {
+        const observeRoot = root === document
+            ? document.documentElement || document.body
+            : root;
+
+        if (!observeRoot) return null;
+
+        const observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+
+                    if (node.matches?.(selector)) {
+                        callback(node);
+                    }
+
+                    const nested = node.querySelectorAll?.(selector);
+                    if (!nested) continue;
+
+                    for (const element of nested) callback(element);
+                }
+            }
+        });
+
+        observer.observe(observeRoot, {
+            childList: true,
+            subtree: true,
+        });
+
+        observers.add(observer);
+        return observer;
+    }
+
+    function onUrlChange(callback) {
+        const check = debounce(() => {
+            if (location.href === lastUrl) return;
+
+            lastUrl = location.href;
+            callback(location.href);
+        }, 100);
+
+        const originalPushState = history.pushState;
+        const originalReplaceState = history.replaceState;
+
+        history.pushState = function (...args) {
+            const result = originalPushState.apply(this, args);
+            check();
+            return result;
+        };
+
+        history.replaceState = function (...args) {
+            const result = originalReplaceState.apply(this, args);
+            check();
+            return result;
+        };
+
+        window.addEventListener('popstate', check);
+        window.addEventListener('hashchange', check);
+
+        const interval = setInterval(check, 1000);
+
+        return () => {
+            history.pushState = originalPushState;
+            history.replaceState = originalReplaceState;
+            window.removeEventListener('popstate', check);
+            window.removeEventListener('hashchange', check);
+            clearInterval(interval);
+            check.cancel();
+        };
+    }
+
+    function normalizeText(value) {
+        return String(value || '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function parseLoanContextFromUrl() {
+        try {
+            const url = new URL(location.href);
+
+            const match = url.pathname.match(
+                /\/admin\/agis2\/core\/(loan(?:-(?:overdue|judicial-recovery|collection-agency))?)\/(\d+)(?:\/|$)/
+            );
+
+            if (!match) return null;
+
+            return {
+                host: url.host,
+                section: match[1],
+                id: match[2],
+                cacheKey: `${SCRIPT_NAME}:${url.host}:${match[1]}:${match[2]}:${CACHE_VERSION}`,
+            };
+        } catch (err) {
+            console.warn(`[${SCRIPT_NAME}] URL parse error:`, err);
+            return null;
+        }
+    }
+
+    function getRowCell(root, labelRegex) {
+        const headers = root.querySelectorAll('th');
+
+        for (const th of headers) {
+            const label = normalizeText(th.textContent);
+
+            if (!labelRegex.test(label)) continue;
+
+            const row = th.closest('tr');
+            const cell = row?.querySelector('td');
+
+            if (cell) return cell;
+        }
+
+        return null;
+    }
+
+    function getRowValue(root, labelRegex, { firstTextOnly = false } = {}) {
+        const cell = getRowCell(root, labelRegex);
+        if (!cell) return null;
+
+        if (firstTextOnly) {
+            for (const node of cell.childNodes) {
+                if (node.nodeType !== Node.TEXT_NODE) continue;
+
+                const text = normalizeText(node.textContent);
+                if (text) return text;
+            }
+        }
+
+        return normalizeText(cell.textContent) || null;
+    }
+
+    function extractValue(text, key, stopRegex) {
+        if (!text) return null;
+
+        const index = text.indexOf(key);
+        if (index === -1) return null;
+
+        let rest = text.slice(index + key.length).replace(/^[:\s]+/, '');
+        const stop = rest.match(stopRegex);
+
+        if (stop && stop.index > 0) {
+            rest = rest.slice(0, stop.index);
+        }
+
+        return normalizeText(rest) || null;
+    }
+
+    function compactData(data) {
+        const result = {};
+
+        for (const [key, value] of Object.entries(data || {})) {
+            const normalized = normalizeText(value);
+            if (normalized) result[key] = normalized;
+        }
+
+        return result;
+    }
+
+    function hasUsefulData(data) {
+        return !!data && Object.values(data).some(Boolean);
+    }
+
+    function parseDoc(doc) {
+        const data = {};
+
+        const sumCell = getRowValue(doc, /^Сумма$/);
+        if (sumCell) {
+            data.body = extractValue(
+                sumCell,
+                'Тело',
+                /Вознаграждение|Сумма продл|Штраф|Депозит|Итого на сегодня|Итого|$/
+            );
+
+            data.total = extractValue(
+                sumCell,
+                'Итого на сегодня',
+                /$/
+            );
+        }
+
+        if (!data.body) {
+            const contractInfo = getRowValue(doc, /^Общая информация по займу$/);
+
+            if (contractInfo) {
+                data.body = extractValue(
+                    contractInfo,
+                    'Сумма по договору:',
+                    /Срок|Количество|Ставка|Платеж|$/
+                );
+            }
+        }
+
+        if (!data.total) {
+            const currentInfo = getRowValue(doc, /^Текущая информация по займу$/);
+
+            if (currentInfo) {
+                data.total = extractValue(
+                    currentInfo,
+                    'Итого задолженность:',
+                    /ДС на счету|$/
+                );
+            }
+        }
+
+        const dateCell = getRowValue(doc, /^Дата$/);
+        if (dateCell) {
+            data.issuedOn = extractValue(
+                dateCell,
+                'Выдан:',
+                /Время выдачи|До:|Продлен|Итого|Просрочен|$/
+            );
+
+            data.dueDate = extractValue(
+                dateCell,
+                'До:',
+                /Продлен|Итого|Просрочен|$/
+            );
+
+            data.totalTerm = extractValue(
+                dateCell,
+                'Итого:',
+                /Просрочен|$/
+            );
+
+            data.overdueDays = extractValue(
+                dateCell,
+                'Просрочен на:',
+                /$/
+            );
+
+            data.extendedTo = extractValue(
+                dateCell,
+                'Продлен до:',
+                /Итого|Просрочен|$/
+            );
+        }
+
+        data.priceList = getRowValue(doc, /^Прайслист$/);
+        data.loanType = getRowValue(doc, /^Тип$/);
+        data.status = getRowValue(doc, /^Статус\b/, { firstTextOnly: true });
+
+        return compactData(data);
+    }
+
+    async function readCache(context) {
+        const entry = await storageGet(context.cacheKey, null);
+
+        if (!entry || typeof entry !== 'object') return null;
+        if (!entry.timestamp || Date.now() - entry.timestamp > CACHE_TTL) return null;
+        if (!hasUsefulData(entry.data)) return null;
+
+        return entry.data;
+    }
+
+    function writeCache(context, data) {
+        if (!hasUsefulData(data)) return;
+
+        storageSetDebounced(context.cacheKey, {
+            timestamp: Date.now(),
+            data,
+        });
+    }
+
     function statusColor(status) {
-        if (!status) return null;
-        const s = status.trim().toLowerCase();
-        if (STATUS_RED.has(s))    return { bg: '#f2dede', fg: '#a94442', bd: '#ebccd1' };
-        if (STATUS_GREY.has(s))   return { bg: '#e7e7e7', fg: '#555555', bd: '#d0d0d0' };
-        if (STATUS_YELLOW.has(s)) return { bg: '#fcf8e3', fg: '#8a6d3b', bd: '#faebcc' };
-        if (STATUS_GREEN.has(s))  return { bg: '#dff0d8', fg: '#3c763d', bd: '#d6e9c6' };
-        // fallback — blue for any status not in the CSV catalogue
+        const normalized = normalizeText(status).toLowerCase();
+
+        if (STATUS_RED.has(normalized)) {
+            return { bg: '#f2dede', fg: '#a94442', bd: '#ebccd1' };
+        }
+
+        if (STATUS_GREY.has(normalized)) {
+            return { bg: '#e7e7e7', fg: '#555555', bd: '#d0d0d0' };
+        }
+
+        if (STATUS_YELLOW.has(normalized)) {
+            return { bg: '#fcf8e3', fg: '#8a6d3b', bd: '#faebcc' };
+        }
+
+        if (STATUS_GREEN.has(normalized)) {
+            return { bg: '#dff0d8', fg: '#3c763d', bd: '#d6e9c6' };
+        }
+
         return { bg: '#d9edf7', fg: '#31708f', bd: '#bce8f1' };
     }
 
-    // ── Render ───────────────────────────────────────────────────────────────
-
-    function buildItem(label, value, highlight = false) {
-        if (!value) return '';
-        const labelColor = highlight ? '#d9534f' : '#8a96a3';
-        const valueColor = highlight ? '#d9534f' : '#1c2733';
-        const fontWeight = highlight ? '700'     : '600';
-        return `<span style="display:inline-flex;flex-direction:column;margin:0 16px 0 0;line-height:1.15">
-            <span style="font-size:9px;color:${labelColor};text-transform:uppercase;letter-spacing:.4px">${label}</span>
-            <span style="font-size:12px;color:${valueColor};font-weight:${fontWeight}">${value}</span>
-        </span>`;
+    function applyItemBaseStyle(wrapper) {
+        Object.assign(wrapper.style, {
+            display: 'inline-flex',
+            flexDirection: 'column',
+            margin: '0 16px 0 0',
+            lineHeight: '1.15',
+            maxWidth: '280px',
+        });
     }
 
-    function buildStatusItem(status) {
-        if (!status) return '';
-        const c = statusColor(status);
-        return `<span style="display:inline-flex;flex-direction:column;margin:0 16px 0 0;line-height:1.15">
-            <span style="font-size:9px;color:#8a96a3;text-transform:uppercase;letter-spacing:.4px">Статус</span>
-            <span style="font-size:12px;font-weight:700;color:${c.fg};background:${c.bg};
-                         border:1px solid ${c.bd};border-radius:3px;padding:1px 7px;white-space:nowrap">
-                ${status}
-            </span>
-        </span>`;
-    }
+    function createItem(label, value, { highlight = false } = {}) {
+        if (!value) return null;
 
-    function render(data) {
-        if (!data) return;
-        const navbar = document.querySelector('.navbar-static-top');
-        if (!navbar) return;
+        const wrapper = document.createElement('span');
+        const labelEl = document.createElement('span');
+        const valueEl = document.createElement('span');
 
-        const existing = document.getElementById('cs-loan-bar');
-        if (existing) existing.remove();
+        applyItemBaseStyle(wrapper);
 
-        const bar = document.createElement('div');
-        bar.id = 'cs-loan-bar';
-        Object.assign(bar.style, {
-            width:        '100%',
-            boxSizing:    'border-box',
-            display:      'flex',
-            flexWrap:     'wrap',
-            alignItems:   'center',
-            padding:      '6px 16px',
-            background:   '#eef3f8',
-            borderTop:    '1px solid #d6e0ea',
-            borderBottom: '1px solid #d6e0ea',
-            fontFamily:   'system-ui,Arial,sans-serif',
+        Object.assign(labelEl.style, {
+            fontSize: '9px',
+            color: highlight ? '#d9534f' : '#8a96a3',
+            textTransform: 'uppercase',
+            letterSpacing: '.4px',
         });
 
-        bar.innerHTML =
-            buildStatusItem(data.status) +
-            buildItem('Выдан',      data.issuedOn) +
-            buildItem('До',         data.dueDate) +
-            buildItem('Срок',       data.totalTerm) +
-            buildItem('Просрочка',  data.overdueDays, !!data.overdueDays) +
-            buildItem('Продлен до', data.extendedTo) +
-            buildItem('Тело',       data.body) +
-            buildItem('Итого',      data.total) +
-            buildItem('Прайслист',  data.priceList) +
-            buildItem('Тип',        data.loanType) +
-            buildItem('Займ',       '#' + loanId);
+        Object.assign(valueEl.style, {
+            fontSize: '12px',
+            color: highlight ? '#d9534f' : '#1c2733',
+            fontWeight: highlight ? '700' : '600',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+        });
+
+        labelEl.textContent = label;
+        valueEl.textContent = value;
+
+        wrapper.append(labelEl, valueEl);
+        return wrapper;
+    }
+
+    function createStatusItem(status) {
+        if (!status) return null;
+
+        const colors = statusColor(status);
+        const wrapper = document.createElement('span');
+        const labelEl = document.createElement('span');
+        const valueEl = document.createElement('span');
+
+        applyItemBaseStyle(wrapper);
+
+        Object.assign(labelEl.style, {
+            fontSize: '9px',
+            color: '#8a96a3',
+            textTransform: 'uppercase',
+            letterSpacing: '.4px',
+        });
+
+        Object.assign(valueEl.style, {
+            fontSize: '12px',
+            fontWeight: '700',
+            color: colors.fg,
+            background: colors.bg,
+            border: `1px solid ${colors.bd}`,
+            borderRadius: '3px',
+            padding: '1px 7px',
+            whiteSpace: 'nowrap',
+        });
+
+        labelEl.textContent = 'Статус';
+        valueEl.textContent = status;
+
+        wrapper.append(labelEl, valueEl);
+        return wrapper;
+    }
+
+    function removeBar() {
+        document.getElementById(BAR_ID)?.remove();
+    }
+
+    function render(context, data, navbar) {
+        if (!context || !hasUsefulData(data) || !navbar) return;
+
+        const signature = JSON.stringify({
+            id: context.id,
+            data,
+        });
+
+        if (signature === lastRenderSignature && document.getElementById(BAR_ID)) {
+            return;
+        }
+
+        lastRenderSignature = signature;
+        removeBar();
+
+        const bar = document.createElement('div');
+        bar.id = BAR_ID;
+
+        Object.assign(bar.style, {
+            width: '100%',
+            boxSizing: 'border-box',
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: '4px 0',
+            padding: '6px 16px',
+            background: '#eef3f8',
+            borderTop: '1px solid #d6e0ea',
+            borderBottom: '1px solid #d6e0ea',
+            fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif',
+            position: 'relative',
+            zIndex: '1000',
+        });
+
+        const items = [
+            createStatusItem(data.status),
+            createItem('Выдан', data.issuedOn),
+            createItem('До', data.dueDate),
+            createItem('Срок', data.totalTerm),
+            createItem('Просрочка', data.overdueDays, { highlight: !!data.overdueDays }),
+            createItem('Продлен до', data.extendedTo),
+            createItem('Тело', data.body),
+            createItem('Итого', data.total),
+            createItem('Прайслист', data.priceList),
+            createItem('Тип', data.loanType),
+            createItem('Займ', `#${context.id}`),
+        ].filter(Boolean);
+
+        for (const item of items) {
+            bar.appendChild(item);
+        }
 
         navbar.parentNode.insertBefore(bar, navbar.nextSibling);
     }
 
-    // ── Cache & data loading ─────────────────────────────────────────────────
+    async function refreshFromDocument(context, navbar) {
+        const data = parseDoc(document);
 
-    // _v39 suffix busts sessionStorage entries from older versions
-    const CACHE_KEY = 'cs_loan_' + loanId + '_v39';
-    const CACHE_TTL = 300 * 1000; // 5 minutes
-
-    // hasTable: page has the show-layout table with <th>Статус</th>.
-    // Edit pages have <input> fields instead — getRowValue finds nothing there.
-    function hasTable(doc) {
-        return !!getRowValue(doc, /^Статус\b/, true);
-    }
-
-    function readCache() {
-        try {
-            const raw = sessionStorage.getItem(CACHE_KEY);
-            if (!raw) return null;
-            const entry = JSON.parse(raw);
-            return (Date.now() - entry.timestamp > CACHE_TTL) ? null : entry.data;
-        } catch (e) { return null; }
-    }
-
-    function writeCache(data) {
-        try {
-            sessionStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data }));
-        } catch (e) {}
-    }
-
-    async function getData() {
-        if (hasTable(document)) {
-            const data = parseDoc(document);
-            writeCache(data);
-            return data;
+        if (!hasUsefulData(data)) {
+            return false;
         }
-        const cached = readCache();
-        if (cached) return cached;
-        try {
-            // IMPORTANT: fetch /show, not /edit.
-            // The /edit page renders <input> fields, not <th>/<td> table rows,
-            // so parseDoc cannot extract status or amounts from it.
-            const resp = await fetch(`${loanPath}/${loanId}/show`, { credentials: 'include' });
-            if (!resp.ok) return null;
-            const fetchedDoc = new DOMParser().parseFromString(await resp.text(), 'text/html');
-            const data = parseDoc(fetchedDoc);
-            writeCache(data);
-            return data;
-        } catch (e) { return null; }
+
+        writeCache(context, data);
+        render(context, data, navbar);
+        return true;
     }
 
-    getData().then(render);
+    async function bootstrap(reason = 'start') {
+        const token = ++routeToken;
+        cleanupRoute();
+
+        const context = parseLoanContextFromUrl();
+
+        if (!context) {
+            removeBar();
+            return;
+        }
+
+        try {
+            const navbar = await waitForElement(NAVBAR_SELECTOR);
+
+            if (token !== routeToken) return;
+
+            const parsed = await refreshFromDocument(context, navbar);
+
+            if (!parsed) {
+                const cached = await readCache(context);
+
+                if (token !== routeToken) return;
+
+                if (cached) {
+                    render(context, cached, navbar);
+                }
+            }
+
+            const delayedRefresh = debounce(async () => {
+                if (token !== routeToken) return;
+
+                const currentContext = parseLoanContextFromUrl();
+
+                if (!currentContext || currentContext.cacheKey !== context.cacheKey) {
+                    return;
+                }
+
+                await refreshFromDocument(currentContext, navbar);
+            }, 300);
+
+            observeAddedElements('table, tbody, tr, th, td', delayedRefresh);
+        } catch (err) {
+            console.warn(`[${SCRIPT_NAME}] init error:`, reason, err);
+        }
+    }
+
+    const stopUrlWatcher = onUrlChange(() => {
+        bootstrap('url-change');
+    });
+
+    window.addEventListener('pagehide', () => {
+        cleanupRoute();
+        stopUrlWatcher();
+
+        for (const timer of storageTimers.values()) {
+            clearTimeout(timer);
+        }
+
+        storageTimers.clear();
+    }, { once: true });
+
+    bootstrap('document-start');
 })();
