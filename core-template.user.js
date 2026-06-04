@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Robust Core Template
 // @namespace    domain.feature        // <- заменить: например agis.loaninfo
-// @version      0.2
-// @description  Устойчивое ядро: ожидание DOM, GM_xmlhttpRequest, debounced GM_setValue, SPA-навигация, routeToken, cleanup
+// @version      0.3
+// @description  Устойчивое ядро: ожидание DOM, GM_xmlhttpRequest, debounced GM_setValue, SPA-навигация, routeToken x4, cleanup
 // @author       me
 // @match        https://example.com/path/*    // <- заменить на реальный домен
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=example.com
@@ -12,28 +12,35 @@
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
 // @connect      example.com            // <- по одному @connect на каждый хост, не *
+// @connect      other-domain.com       // <- ещё один, если нужно
 // ==/UserScript==
 
 (() => {
   'use strict';
 
   // --- Настройки ---
-  const SCRIPT_NS  = 'robust-core';   // <- заменить
-  const DEBUG      = true;
+  const SCRIPT_NS    = 'robust-core';   // <- заменить
+  const DEBUG        = true;
   const WAIT_TIMEOUT = 15000;
 
   const log  = (...a) => { if (DEBUG) console.log(`[${SCRIPT_NS}]`, ...a); };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
 
   // --- Трекинг всех observerов и таймеров ---
-  const observers = new Set();
-  const timers    = new Set();
+  const observers    = new Set();
+  const timers       = new Set();
   const storageTimers = new Map();
 
   // routeToken — инкрементируется при каждом SPA-переходе.
-  // После каждого await проверяй: if (token !== routeToken) return;
+  // Правило: проверяй (token !== routeToken) ПОСЛЕ каждого await.
+  // Четыре проверки: (1) после waitForElement, (2) после DOM-парсинга,
+  // (3) после GM_getValue, (4) после GM_xmlhttpRequest.
   let routeToken = 0;
   let lastUrl    = location.href;
+
+  // Функция для внешних stopObserver: хранит функцию отключения дополнительных observerов,
+  // например table-observerа. Чистится в cleanupRoute.
+  let stopExtraObserver = null;
 
   // setTimeout, который регистрируется в наборе и авто-удаляется по завершении
   function setManagedTimeout(callback, delay) {
@@ -42,13 +49,26 @@
     return timer;
   }
 
-  // cleanupRoute — вызывай при каждом SPA-переходе.
+  // debounce — нужен для onUrlChange и observer-колбэков.
+  // debounced.cancel() — отменяет ожидающий вызов.
+  function debounce(fn, wait = 250) {
+    let timer = null;
+    function debounced(...args) {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn.apply(this, args), wait);
+    }
+    debounced.cancel = () => { clearTimeout(timer); timer = null; };
+    return debounced;
+  }
+
+  // cleanupRoute — вызывай в начале каждого bootstrap.
   // Чистит observerы и таймеры текущего маршрута, не трогая сторадж-таймеры.
   function cleanupRoute() {
     for (const o of observers) o.disconnect();
     observers.clear();
     for (const t of timers) clearTimeout(t);
     timers.clear();
+    if (stopExtraObserver) { stopExtraObserver(); stopExtraObserver = null; }
   }
 
   // cleanup — полная очистка при выгрузке страницы.
@@ -68,7 +88,7 @@
     } catch (e) { warn('GM_getValue ошибка:', key, e); return fallback; }
   }
 
-  // Частые записи через debounce — защита от избыточных write-запросов к GM
+  // Частые записи через debounce — защита от избыточных write-запросов к GM.
   function storageSetDebounced(key, value, wait = 300) {
     const old = storageTimers.get(key);
     if (old) clearTimeout(old);
@@ -99,7 +119,7 @@
       const fail = () => {
         if (done) return; done = true;
         if (observer) { observer.disconnect(); observers.delete(observer); }
-        warn(`waitForElement: "${selector}" не найден за ${timeout} мс (${location.href})`);
+        warn(`waitForElement: "${selector}" не найден за ${timeout} мс (${location.href})`);
         reject(new Error(`waitForElement: "${selector}" not found`));
       };
 
@@ -108,7 +128,7 @@
 
       const timeoutTimer = setManagedTimeout(fail, timeout);
 
-      // Если documentElement ещё нет (ранний document-start) — повторяем через 50 мс
+      // Если documentElement ещё нет (ранний document-start) — повторяем через 50 мс
       const startObserve = () => {
         if (done) return;
         const observeRoot = root === document
@@ -140,22 +160,18 @@
     });
     observer.observe(root, { childList: true, subtree: true });
     observers.add(observer);
-    return observer;
-  }
-
-  function onDomReady(cb) {
-    if (document.readyState === 'interactive' || document.readyState === 'complete') { cb(); return; }
-    document.addEventListener('DOMContentLoaded', cb, { once: true });
+    return () => { observer.disconnect(); observers.delete(observer); }; // возвращает stopFn
   }
 
   // --- Сетевые запросы через GM_xmlhttpRequest (обходит CSP сайта) ---
   // Домены должны быть перечислены в @connect по одному на каждый хост.
+  // GM_xmlhttpRequest может отправить одно событие progress — не используй его для потроковой качки.
   function httpRequest(details) {
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
         timeout: 20000, ...details,
-        onload:   resolve,
-        onerror:  reject,
+        onload:    resolve,
+        onerror:   reject,
         ontimeout: () => reject(new Error('GM_xmlhttpRequest timeout')),
         onabort:   () => reject(new Error('GM_xmlhttpRequest aborted')),
       });
@@ -163,6 +179,7 @@
   }
 
   const api = {
+    // JSON GET
     async getJson(url, headers = {}) {
       const r = await httpRequest({
         method: 'GET', url,
@@ -172,6 +189,7 @@
       if (r.status !== 200) throw new Error(`getJson: HTTP ${r.status} ${url}`);
       return { status: r.status, data: r.response, finalUrl: r.finalUrl || url };
     },
+    // JSON POST
     async postJson(url, body, headers = {}) {
       const r = await httpRequest({
         method: 'POST', url,
@@ -181,21 +199,29 @@
       if (r.status !== 200) throw new Error(`postJson: HTTP ${r.status} ${url}`);
       return { status: r.status, data: r.response, finalUrl: r.finalUrl || url };
     },
+    // HTML GET — получает HTML и парсит в Document через DOMParser.
+    // Используй когда нужно работать с DOM ответа (querySelectorAll, parseDoc и т.d.).
+    async getHtml(url, headers = {}) {
+      const r = await httpRequest({
+        method: 'GET', url,
+        headers: { 'Accept': 'text/html,*/*', ...headers },
+      });
+      if (r.status !== 200) throw new Error(`getHtml: HTTP ${r.status} ${url}`);
+      const doc = new DOMParser().parseFromString(r.responseText, 'text/html');
+      return { status: r.status, doc, finalUrl: r.finalUrl || url };
+    },
   };
 
   // --- SPA-навигация ---
   // Перехватывает pushState/replaceState + popstate + hashchange.
-  // debounce 100 мс — защита от двойного срабатывания при replaceState+pushState подряд.
+  // Дополнительный setInterval 1с — запасной механизм для фреймворков, не отправляющих History API события.
+  // Возвращает stopFn — вызвать чтобы полностью очистить подписки при pagehide.
   function onUrlChange(callback) {
-    let debounceTimer = null;
-    const check = () => {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        if (location.href === lastUrl) return;
-        lastUrl = location.href;
-        callback(lastUrl);
-      }, 100);
-    };
+    const check = debounce(() => {
+      if (location.href === lastUrl) return;
+      lastUrl = location.href;
+      callback(location.href);
+    }, 100);
 
     const origPush    = history.pushState;
     const origReplace = history.replaceState;
@@ -203,30 +229,97 @@
     history.replaceState = function (...a) { const r = origReplace.apply(this, a); check(); return r; };
     window.addEventListener('popstate',   check);
     window.addEventListener('hashchange', check);
+    // setInterval — поллинг на случай фреймворков без History API
+    const interval = setInterval(check, 1000);
+
+    return () => {
+      history.pushState    = origPush;
+      history.replaceState = origReplace;
+      window.removeEventListener('popstate',   check);
+      window.removeEventListener('hashchange', check);
+      clearInterval(interval);
+      check.cancel();
+    };
   }
 
   // --- Точка входа ---
-  async function bootstrap() {
-    log('Инициализация');
+  // Шаблон структуры bootstrap() с четырьмя проверками routeToken.
+  //
+  // Порядок проверок (N = количество await операций):
+  //   1. после waitForElement (DOM-ожидание)
+  //   2. после DOM-парсинга или любых синхронных операций
+  //   3. после storageGet (GM_getValue)
+  //   4. после сетевого запроса (GM_xmlhttpRequest) — самый долгий await
+  async function bootstrap(reason = 'start') {
+    const token = ++routeToken;
+    cleanupRoute(); // всегда первым действием
+    log('Инициализация:', reason);
 
-    onDomReady(async () => {
-      const token = ++routeToken;
-      try {
-        await waitForElement('body');
-        if (token !== routeToken) return; // маршрут сменился пока ждали
-        log('DOM готов');
-        // TODO: здесь основная логика скрипта
-      } catch (e) { warn(e.message); }
-    });
+    try {
+      // [1] Ждём DOM.
+      // @run-at document-start: нельзя предполагать, что элемент уже есть.
+      const targetEl = await waitForElement('#target-selector'); // <- заменить
 
-    // Переинициализация при SPA-переходе
-    onUrlChange((url) => {
-      log('SPA-переход:', url);
-      cleanupRoute();
-      // TODO: здесь переинициализация логики
-    });
+      // [1] Проверка токена сразу после получения элемента
+      if (token !== routeToken) return;
+
+      // [2] Синхронные операции: парсинг DOM, вычисления и т.д.
+      const parsed = parsePage(); // <- заменить собственной логикой
+
+      // [2] Проверка токена после парсинга
+      if (token !== routeToken) return;
+
+      if (!parsed) {
+        // [3] Если DOM пустой — пробуем кеш
+        const cached = await storageGet('my-cache-key', null);
+
+        // [3] Проверка токена после GM_getValue
+        if (token !== routeToken) return;
+
+        if (cached) {
+          render(cached, targetEl);
+        } else {
+          // [4] Нет ни DOM, ни кеша — идём на бэкенд через GM_xmlhttpRequest
+          try {
+            const { doc } = await api.getHtml(`https://example.com/path/data`);
+            // [4] Проверка токена после сетевого запроса (самый долгий await)
+            if (token !== routeToken) return;
+            const data = parseDoc(doc);
+            storageSetDebounced('my-cache-key', data);
+            render(data, targetEl);
+          } catch (e) {
+            warn('Бэкенд fallback не удался:', e.message);
+          }
+        }
+      } else {
+        render(parsed, targetEl);
+        storageSetDebounced('my-cache-key', parsed);
+      }
+
+      // Дополнительный observer (например, для слежения за изменениями таблиц).
+      // Хранится в stopExtraObserver — cleanupRoute() его отключит при следующем bootstrap.
+      const debouncedRefresh = debounce(async () => {
+        if (token !== routeToken) return;
+        // TODO: перечитать DOM и обновить рендер
+      }, 300);
+      stopExtraObserver = observeAddedElements('table, tbody', debouncedRefresh);
+
+    } catch (err) {
+      warn(`Ошибка (${reason}):`, err.message);
+    }
   }
 
-  window.addEventListener('pagehide', cleanup, { once: true });
-  bootstrap().catch(e => console.error(`[${SCRIPT_NS}] Критическая ошибка`, e));
+  // --- Запуск ---
+  // onUrlChange возвращает stopFn — вызываем его при pagehide вместе с cleanup.
+  const stopUrlWatcher = onUrlChange((url) => {
+    log('SPA-переход:', url);
+    bootstrap('url-change');
+  });
+
+  window.addEventListener('pagehide', () => {
+    cleanup();
+    stopUrlWatcher();
+  }, { once: true });
+
+  bootstrap('document-start');
 })();
