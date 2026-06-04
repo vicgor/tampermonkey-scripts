@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CreditSmile - дублировать приход
 // @namespace    agis.duplicate.income
-// @version      2.2
+// @version      2.3
 // @description  Клик по строке прихода → открыть форму создания и автозаполнить (дата, шлюз, внешний ID, сумма). Ручное подтверждение.
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan*/*/income/*
@@ -61,7 +61,6 @@
     storageTimers.clear();
   }
 
-  // storageGet/storageSet — await внутри async-функций; await на синхронном значении безопасен
   async function storageGet(key, fallback = null) {
     try {
       const v = await GM_getValue(key, fallback);
@@ -74,7 +73,6 @@
     catch (e) { warn('GM_setValue ошибка:', key, e); }
   }
 
-  // Ожидание DOM-элемента через MutationObserver (без setInterval)
   function waitForElement(selector, { root = document, timeout = WAIT_TIMEOUT } = {}) {
     return new Promise((resolve, reject) => {
       let done = false, observer = null;
@@ -135,40 +133,56 @@
     return `${m[3]}-${pad(mon)}-${pad(m[1])} ${pad(m[4])}:${m[5]}:${m[6]}`;
   }
 
-  // --- Страница списка: ждём таблицу, потом навешиваем обработчики ---
+  // --- Страница списка ---
   async function initListPage(token) {
     let table;
     try {
-      // Таблица появляется асинхронно — document-start не гарантирует её наличие
-      table = await waitForElement(
-        'table.sonata-ba-list, table.table',
-        { timeout: WAIT_TIMEOUT }
-      );
+      table = await waitForElement('table.sonata-ba-list, table.table', { timeout: WAIT_TIMEOUT });
     } catch (e) {
       warn('Таблица не появилась за', WAIT_TIMEOUT, 'мс:', e.message);
       return;
     }
-    if (token !== routeToken) return; // SPA-переход пока ждали
+    if (token !== routeToken) return;
 
+    // Определяем индексы колонок по заголовкам
     const headerCells = table.querySelectorAll('thead th');
     const colIndex = {};
     headerCells.forEach((th, i) => {
       const t = th.textContent.trim().toLowerCase();
-      if (t.includes('дата'))                      colIndex.date    = i;
-      if (t.includes('платежный шлюз'))            colIndex.gateway = i;
-      if (t === 'платеж' || t.startsWith('платеж')) colIndex.payment = i;
-      if (t.includes('внешний id'))                colIndex.extId   = i;
+      if (t.includes('дата'))                       colIndex.date    = i;
+      if (t.includes('платежный шлюз'))             colIndex.gateway = i;
+      if (t === 'платеж' || t.startsWith('платеж'))  colIndex.payment = i;
+      if (t.includes('внешний id'))                 colIndex.extId   = i;
+      if (t.includes('статус'))                       colIndex.status  = i; // колонка Статус
     });
     log('Колонки:', colIndex);
 
     const style = document.createElement('style');
-    style.textContent = 'tr.cs-dup-row{cursor:copy}tr.cs-dup-row:hover td{background:#fff7d6!important}';
+    style.textContent = [
+      // Подсветка отменённых: серый фон, полпрозрачный текст
+      'tr.cs-cancelled td { background: #f0f0f0 !important; color: #888 !important; }',
+      // При наведении на отменённую — чуть темнее
+      'tr.cs-cancelled:hover td { background: #e4e4e4 !important; }',
+      // Обычные строки: жёлтый hover + cursor copy
+      'tr.cs-dup-row { cursor: copy; }',
+      'tr.cs-dup-row:not(.cs-cancelled):hover td { background: #fff7d6 !important; }',
+    ].join('\n');
     document.head.appendChild(style);
 
     const rows = table.querySelectorAll('tbody tr');
     rows.forEach(tr => {
+      // Определяем статус текущей строки
+      const statusCell = colIndex.status !== undefined ? tr.children[colIndex.status] : null;
+      const statusText = cellText(statusCell);
+      const isCancelled = statusText === 'Отменен';
+
       tr.classList.add('cs-dup-row');
-      tr.title = 'Клик: дублировать этот приход';
+      if (isCancelled) tr.classList.add('cs-cancelled');
+
+      tr.title = isCancelled
+        ? 'Статус: Отменен. Клик: дублировать'
+        : 'Клик: дублировать этот приход';
+
       tr.addEventListener('click', (e) => {
         if (e.target.closest('a, button, input, label, .btn')) return;
         e.preventDefault();
@@ -200,7 +214,7 @@
     let data;
     try { data = JSON.parse(raw); } catch (e) { warn('Неверный payload:', e); return; }
 
-    await storageSet(STORAGE_KEY, null); // сброс — F5 не заполнит повторно
+    await storageSet(STORAGE_KEY, null);
     if (token !== routeToken) return;
 
     try { await waitForElement('input[name$="[incomeDate]"]', { timeout: 10000 }); }
@@ -239,7 +253,7 @@
     }
 
     const banner = document.createElement('div');
-    banner.textContent = 'Поля заполнены. Проверьте и нажмите «Предпросмотр».';
+    banner.textContent = 'Поля заполнены. Преверьте и нажмите «Предпросмотр».';
     Object.assign(banner.style, { position:'fixed', top:'60px', right:'20px', zIndex:'99999',
       background:'#00a65a', color:'#fff', padding:'10px 14px', borderRadius:'4px',
       boxShadow:'0 2px 8px rgba(0,0,0,.2)', fontSize:'14px', maxWidth:'360px' });
@@ -252,12 +266,10 @@
   async function bootstrap() {
     const token = ++routeToken;
     cleanupRoute();
-    // Ждём body (document-start — DOM ещё может быть пустым)
     try { await waitForElement('body'); } catch (e) { warn('body:', e.message); return; }
     if (token !== routeToken) return;
 
     const path = location.pathname;
-    // Оба пути async — await, чтобы ошибки всплывали корректно
     if (/\/income\/list/.test(path) || /\/income\/?$/.test(path)) await initListPage(token);
     if (/\/income\/create/.test(path)) await initCreatePage(token);
   }
