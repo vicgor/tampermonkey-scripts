@@ -1,259 +1,338 @@
 // ==UserScript==
 // @name         AGIS автозаполнение из Google Sheets
-// @namespace    http://tampermonkey.net/
-// @version      3.1
-// @description  Автозаполнение формы AGIS из Google Таблицы (CSV Publish)
+// @namespace    agis.income.googlesheet
+// @version      4.0
+// @description  Автозаполнение формы AGIS из Google Таблицы (CSV Publish). Запрос через GM_xmlhttpRequest (обходит CSP).
 // @match        https://agis.creditsmile.ru/*/loan*/*/income/create
 // @match        https://agis.belkacredit.ru/*/loan*/*/income/create
 // @match        https://agis.volgazaim.ru/*/loan*/*/income/create
 // @match        https://agis.berrycash.ru/*/loan*/*/income/create
 // @match        https://agis.moneymania.ru/*/loan*/*/income/create
-// @run-at       document-idle
+// @match        https://agis.credit7.ru/*/loan*/*/income/create
+// @match        https://agis.credit365.ru/*/loan*/*/income/create
+// @run-at       document-start
+// @sandbox      DOM
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_xmlhttpRequest
 // @grant        GM_registerMenuCommand
+// @connect      docs.google.com
+// @connect      googleusercontent.com
 // ==/UserScript==
 
-(function () {
-    'use strict';
+(() => {
+  'use strict';
 
-    const STORAGE_KEY = 'agis_google_sheet_url';
+  const SCRIPT_NS   = 'agis-googlesheet';
+  const STORAGE_KEY = 'agis_google_sheet_url';
+  const WAIT_TIMEOUT = 15000;
 
-    // --- Управление URL таблицы ---
+  const log  = (...a) => console.log(`[${SCRIPT_NS}]`, ...a);
+  const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
 
-    // Получить URL из хранилища; если не задан — спросить пользователя
-    function getSheetUrl() {
-        let url = GM_getValue(STORAGE_KEY, '');
-        if (!url) {
-            url = prompt(
-                'AGIS: введите ссылку на опубликованную Google Таблицу (формат CSV):\n' +
-                'Пример: https://docs.google.com/spreadsheets/d/ID/export?format=csv&gid=0'
-            );
-            if (url && url.trim()) {
-                GM_setValue(STORAGE_KEY, url.trim());
-            } else {
-                alert('URL не задан. Скрипт не будет работать до его указания.');
-                return null;
-            }
-        }
-        return url;
-    }
+  // --- Трекинг observers и таймеров ---
+  const observers    = new Set();
+  const timers       = new Set();
+  const storageTimers = new Map();
 
-    // Пункт меню для изменения URL без правки кода
-    GM_registerMenuCommand('Изменить URL Google Таблицы', () => {
-        const current = GM_getValue(STORAGE_KEY, '');
-        const newUrl = prompt('Введите новый URL Google Таблицы (CSV):', current);
-        if (newUrl !== null) {
-            GM_setValue(STORAGE_KEY, newUrl.trim());
-            alert('URL сохранён. Обновите страницу.');
-        }
+  let routeToken = 0;
+
+  function setManagedTimeout(cb, delay) {
+    const t = setTimeout(() => { timers.delete(t); cb(); }, delay);
+    timers.add(t);
+    return t;
+  }
+
+  function debounce(fn, wait = 250) {
+    let t = null;
+    function d(...args) { clearTimeout(t); t = setTimeout(() => fn.apply(this, args), wait); }
+    d.cancel = () => { clearTimeout(t); t = null; };
+    return d;
+  }
+
+  function cleanupRoute() {
+    for (const o of observers) o.disconnect();
+    observers.clear();
+    for (const t of timers) clearTimeout(t);
+    timers.clear();
+  }
+
+  function cleanup() {
+    cleanupRoute();
+    for (const t of storageTimers.values()) clearTimeout(t);
+    storageTimers.clear();
+  }
+
+  // --- Хранилище (async, как предписывает ядро) ---
+  async function storageGet(key, fallback = null) {
+    try {
+      const v = await GM_getValue(key, fallback);
+      return v === undefined ? fallback : v;
+    } catch (e) { warn('GM_getValue ошибка:', key, e); return fallback; }
+  }
+
+  function storageSetDebounced(key, value, wait = 300) {
+    const old = storageTimers.get(key);
+    if (old) clearTimeout(old);
+    const t = setTimeout(async () => {
+      storageTimers.delete(key);
+      try { await GM_setValue(key, value); }
+      catch (e) { warn('GM_setValue ошибка:', key, e); }
+    }, wait);
+    storageTimers.set(key, t);
+  }
+
+  // --- DOM-ожидание через MutationObserver (не setInterval) ---
+  function waitForElement(selector, { root = document, timeout = WAIT_TIMEOUT } = {}) {
+    return new Promise((resolve, reject) => {
+      let done = false;
+      let observer = null;
+      const query = () => { try { return root.querySelector(selector); } catch (_) { return null; } };
+      const finish = (el) => {
+        if (done) return; done = true;
+        if (observer) { observer.disconnect(); observers.delete(observer); }
+        clearTimeout(timeoutTimer); timers.delete(timeoutTimer);
+        resolve(el);
+      };
+      const fail = () => {
+        if (done) return; done = true;
+        if (observer) { observer.disconnect(); observers.delete(observer); }
+        reject(new Error(`waitForElement: "${selector}" не найден за ${timeout} мс`));
+      };
+      const ex = query();
+      if (ex) { resolve(ex); return; }
+      const timeoutTimer = setManagedTimeout(fail, timeout);
+      const startObserve = () => {
+        if (done) return;
+        const root2 = root === document ? (document.documentElement || document.body) : root;
+        if (!root2) { setManagedTimeout(startObserve, 50); return; }
+        observer = new MutationObserver(() => { const el = query(); if (el) finish(el); });
+        observer.observe(root2, { childList: true, subtree: true });
+        observers.add(observer);
+        const el = query(); if (el) finish(el);
+      };
+      startObserve();
     });
+  }
 
-    // --- Кнопка ---
+  // --- Сетевой запрос через GM_xmlhttpRequest (обходит CSP страницы) ---
+  // fetch() здесь нельзя: AGIS блокирует запросы к внешним доменам через CSP.
+  // GM_xmlhttpRequest работает в контексте расширения, не страницы.
+  function httpRequest(details) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        timeout: 20000, ...details,
+        onload:    resolve,
+        onerror:   reject,
+        ontimeout: () => reject(new Error('GM_xmlhttpRequest timeout')),
+        onabort:   () => reject(new Error('GM_xmlhttpRequest aborted')),
+      });
+    });
+  }
 
+  async function fetchCsv(url) {
+    // Google Sheets redirect: docs.google.com → *.googleusercontent.com
+    // GM_xmlhttpRequest следует редиректам автоматически;
+    // оба домена указаны в @connect.
+    const r = await httpRequest({ method: 'GET', url });
+    if (r.status !== 200) throw new Error(`HTTP ${r.status} ${r.finalUrl || url}`);
+    return r.responseText;
+  }
+
+  // --- RFC 4180-совместимый CSV-парсер ---
+  function parseCSV(csvText) {
+    const rows = tokenizeCSV(csvText);
+    if (rows.length < 2) return {};
+    const headers = rows[0].map(h => h.trim());
+    const out = {};
+    for (let i = 1; i < rows.length; i++) {
+      const cols = rows[i];
+      if (cols.length === 0 || (cols.length === 1 && cols[0] === '')) continue;
+      const obj = {};
+      headers.forEach((h, idx) => { obj[h] = (cols[idx] ?? '').trim(); });
+      const loanId = obj['loanid'];
+      if (!loanId) continue;
+      out[loanId] = {
+        order:      '-',
+        sum:        obj['amount'],
+        date:       obj['paramIncomeDate'],
+        incomeType: obj['incomeType'],
+        comment:    obj['comment'],
+      };
+    }
+    return out;
+  }
+
+  function tokenizeCSV(text) {
+    const rows = [];
+    let row = [], field = '', inQuotes = false, i = 0;
+    text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    while (i < text.length) {
+      const ch = text[i];
+      if (inQuotes) {
+        if (ch === '"' && text[i + 1] === '"') { field += '"'; i += 2; }
+        else if (ch === '"') { inQuotes = false; i++; }
+        else { field += ch; i++; }
+      } else {
+        if      (ch === '"')  { inQuotes = true; i++; }
+        else if (ch === ',')  { row.push(field); field = ''; i++; }
+        else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; }
+        else                  { field += ch; i++; }
+      }
+    }
+    row.push(field);
+    if (row.length > 1 || row[0] !== '') rows.push(row);
+    return rows;
+  }
+
+  // --- Вспомогательные ---
+  function pad(n) { return n < 10 ? '0' + n : n; }
+
+  function toDateTimeString(dateStr) {
+    if (!dateStr) return '';
+    let d;
+    if (/^\d{2}\.\d{2}\.\d{4}$/.test(dateStr)) {
+      const [dd, mm, yyyy] = dateStr.split('.');
+      d = new Date(`${yyyy}-${mm}-${dd}`);
+    } else if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+      d = new Date(dateStr);
+    } else {
+      d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+    }
+    const now = new Date();
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+           `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  }
+
+  // --- Заполнение поля (ждёт появления через MO, не setInterval) ---
+  async function waitForAndFill(selector, value) {
+    if (!value) return;
+    try {
+      const input = await waitForElement(selector, { timeout: 10000 });
+      if (input.tagName.toLowerCase() === 'select') {
+        const option = Array.from(input.options).find(o => o.text.trim() === value.trim());
+        if (option) {
+          input.value = option.value;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      } else {
+        input.value = value;
+        input.dispatchEvent(new Event('input',  { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    } catch (e) {
+      warn(`Поле "${selector}" не найдено:`, e.message);
+    }
+  }
+
+  // --- UI: кнопка ---
+  function createButton() {
     const btn = document.createElement('button');
-    btn.innerText = 'Подгрузить данные из Google Sheets';
+    btn.textContent = 'Подгрузить данные из Google Sheets';
     Object.assign(btn.style, {
-        position: 'fixed', top: '10px', right: '10px',
-        zIndex: 10000, padding: '6px 12px', cursor: 'pointer'
+      position: 'fixed', top: '10px', right: '10px',
+      zIndex: '10000', padding: '6px 12px', cursor: 'pointer',
     });
-    document.body.appendChild(btn);
+    return btn;
+  }
 
-    let data = null;
+  function showBanner(text, color = '#00a65a') {
+    const div = document.createElement('div');
+    div.textContent = text;
+    Object.assign(div.style, {
+      position: 'fixed', top: '60px', right: '20px', zIndex: '99999',
+      background: color, color: '#fff', padding: '10px 14px', borderRadius: '4px',
+      boxShadow: '0 2px 8px rgba(0,0,0,.2)', fontSize: '14px', maxWidth: '360px',
+    });
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 6000);
+  }
 
-    btn.onclick = function () {
-        const url = getSheetUrl();
-        if (!url) return;
+  // --- Меню Tampermonkey для изменения URL без правки кода ---
+  GM_registerMenuCommand('Изменить URL Google Таблицы', async () => {
+    const current = await storageGet(STORAGE_KEY, '');
+    const newUrl = prompt('Введите новый URL Google Таблицы (CSV):', current);
+    if (newUrl !== null) {
+      storageSetDebounced(STORAGE_KEY, newUrl.trim(), 0);
+      alert('URL сохранён. Обновите страницу.');
+    }
+  });
 
-        btn.disabled = true;
-        btn.innerText = 'Загрузка...';
+  // --- Точка входа ---
+  async function bootstrap() {
+    const token = ++routeToken;
+    cleanupRoute();
 
-        fetch(url)
-            .then(resp => {
-                if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
-                return resp.text();
-            })
-            .then(csv => {
-                data = parseCSV(csv);
-                console.log('AGIS data:', JSON.stringify(data));
-                alert('Данные из Google загружены!');
-                fillForm();
-            })
-            .catch(err => {
-                alert('Ошибка загрузки данных из Google Sheets:\n' + err.message);
-                console.error(err);
-            })
-            .finally(() => {
-                btn.disabled = false;
-                btn.innerText = 'Подгрузить данные из Google Sheets';
-            });
-    };
+    // Ждём body (document-start не гарантирует его наличие)
+    let body;
+    try { body = await waitForElement('body'); }
+    catch (e) { warn('body не найден:', e.message); return; }
+    if (token !== routeToken) return;   // [1] SPA-переход пока ждали
 
-    // --- RFC 4180-совместимый CSV-парсер ---
-    // Корректно обрабатывает: значения с запятыми, кавычки, переносы строк внутри полей
+    // [2] Получаем URL таблицы из GM-хранилища
+    let sheetUrl = await storageGet(STORAGE_KEY, '');
+    if (token !== routeToken) return;   // [2]
 
-    function parseCSV(csvText) {
-        const rows = tokenizeCSV(csvText);
-        if (rows.length < 2) return {};
-
-        const headers = rows[0].map(h => h.trim());
-        const out = {};
-
-        for (let i = 1; i < rows.length; i++) {
-            const cols = rows[i];
-            if (cols.length === 0 || (cols.length === 1 && cols[0] === '')) continue;
-
-            const obj = {};
-            headers.forEach((h, idx) => { obj[h] = (cols[idx] ?? '').trim(); });
-
-            const loanId = obj['loanid'];
-            if (!loanId) continue;
-
-            out[loanId] = {
-                order:      '-',
-                sum:        obj['amount'],
-                date:       obj['paramIncomeDate'],
-                incomeType: obj['incomeType'],
-                comment:    obj['comment']
-            };
-        }
-        return out;
+    if (!sheetUrl) {
+      sheetUrl = prompt(
+        'AGIS: введите ссылку на опубликованную Google Таблицу (формат CSV):\n' +
+        'Пример: https://docs.google.com/spreadsheets/d/ID/export?format=csv&gid=0'
+      );
+      if (!sheetUrl?.trim()) {
+        alert('URL не задан. Скрипт не будет работать до его указания.');
+        return;
+      }
+      storageSetDebounced(STORAGE_KEY, sheetUrl.trim());
     }
 
-    // Токенизатор CSV по RFC 4180
-    function tokenizeCSV(text) {
-        const rows = [];
-        let row = [];
-        let field = '';
-        let inQuotes = false;
-        let i = 0;
+    // Кнопка — добавляем только после появления body
+    const btn = createButton();
+    body.appendChild(btn);
 
-        // Нормализуем переносы строк
-        text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    // Debounce защищает от двойных кликов; ещё и визуальная блокировка ниже
+    const handleClick = debounce(async () => {
+      btn.disabled = true;
+      btn.textContent = 'Загрузка...';
+      try {
+        // [3] Сетевой запрос через GM_xmlhttpRequest (не fetch!)
+        const csv = await fetchCsv(sheetUrl);
+        if (token !== routeToken) return;  // [3] SPA-переход пока грузили
+        const data = parseCSV(csv);
+        log('Данные загружены:', data);
+        await fillForm(data);
+        showBanner('Данные из Google загружены!');
+      } catch (err) {
+        warn('Ошибка загрузки:', err.message);
+        showBanner('Ошибка загрузки данных:\n' + err.message, '#c0392b');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Подгрузить данные из Google Sheets';
+      }
+    }, 400);
 
-        while (i < text.length) {
-            const ch = text[i];
+    btn.addEventListener('click', handleClick);
+  }
 
-            if (inQuotes) {
-                if (ch === '"') {
-                    // Экранированная кавычка: "" внутри поля
-                    if (text[i + 1] === '"') {
-                        field += '"';
-                        i += 2;
-                    } else {
-                        // Закрывающая кавычка
-                        inQuotes = false;
-                        i++;
-                    }
-                } else {
-                    field += ch;
-                    i++;
-                }
-            } else {
-                if (ch === '"') {
-                    inQuotes = true;
-                    i++;
-                } else if (ch === ',') {
-                    row.push(field);
-                    field = '';
-                    i++;
-                } else if (ch === '\n') {
-                    row.push(field);
-                    rows.push(row);
-                    row = [];
-                    field = '';
-                    i++;
-                } else {
-                    field += ch;
-                    i++;
-                }
-            }
-        }
-
-        // Последнее поле/строка без завершающего переноса строки
-        row.push(field);
-        if (row.length > 1 || row[0] !== '') rows.push(row);
-
-        return rows;
+  async function fillForm(data) {
+    const match = location.pathname.match(/\/(\d+)\/income\/create/);
+    if (!match) return;
+    const id   = match[1];
+    const fill = data[id];
+    if (!fill) {
+      alert('Для номера заявки ' + id + ' нет данных в таблице!');
+      return;
     }
+    // Каждый waitForElement использует MutationObserver, не setInterval
+    await waitForAndFill('[id$="_bankPaymentId"]', fill.order);
+    await waitForAndFill('[id$="_income"]',        fill.sum);
+    await waitForAndFill('[id$="_incomeDate"]',    toDateTimeString(fill.date));
+    await waitForAndFill('[id$="_comment"]',       fill.comment);
+    await waitForAndFill('[id$="_manualIncomeType"]', fill.incomeType);
+    log('Автозаполнение:', id, fill);
+  }
 
-    // --- Ожидание и заполнение поля ---
-
-    function waitForAndFill(idSuffix, value) {
-        const MAX_ATTEMPTS = 50; // 50 × 200мс = 10 сек максимум
-        let attempts = 0;
-
-        const timer = setInterval(() => {
-            attempts++;
-
-            const input = Array.from(document.querySelectorAll('input, textarea, select'))
-                .find(el => el.id && el.id.endsWith('_' + idSuffix));
-
-            if (input) {
-                clearInterval(timer);
-                if (input.tagName.toLowerCase() === 'select') {
-                    const option = Array.from(input.options)
-                        .find(opt => opt.text.trim() === value.trim());
-                    if (option) {
-                        input.value = option.value;
-                        input.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-                } else {
-                    input.value = value;
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-                return;
-            }
-
-            if (attempts >= MAX_ATTEMPTS) {
-                clearInterval(timer); // утечка таймера устранена
-                console.warn(`[AGIS] Поле "${idSuffix}" не найдено за ${MAX_ATTEMPTS * 200}мс`);
-            }
-        }, 200);
-    }
-
-    // --- Вспомогательные функции ---
-
-    function pad(n) { return n < 10 ? '0' + n : n; }
-
-    function toDateTimeString(dateStr) {
-        if (!dateStr) return '';
-        let d;
-        if (/^\d{2}\.\d{2}\.\d{4}$/.test(dateStr)) {
-            const [dd, mm, yyyy] = dateStr.split('.');
-            d = new Date(`${yyyy}-${mm}-${dd}`);
-        } else if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
-            d = new Date(dateStr);
-        } else {
-            d = new Date(dateStr);
-            if (isNaN(d.getTime())) return dateStr;
-        }
-        const now = new Date();
-        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
-               `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-    }
-
-    // --- Заполнение формы ---
-
-    function fillForm() {
-        if (!data) return;
-        const match = window.location.pathname.match(/\/(\d+)\/income\/create/);
-        if (!match) return;
-
-        const id = match[1];
-        const fill = data[id];
-        if (!fill) {
-            alert('Для номера заявки ' + id + ' нет данных в таблице!');
-            return;
-        }
-
-        waitForAndFill('bankPaymentId', fill.order);
-        waitForAndFill('income', fill.sum);
-        waitForAndFill('incomeDate', toDateTimeString(fill.date));
-        waitForAndFill('comment', fill.comment);
-        waitForAndFill('manualIncomeType', fill.incomeType);
-
-        console.log('AGIS автозаполнение:', id, fill);
-    }
-
+  // --- Запуск ---
+  window.addEventListener('pagehide', cleanup, { once: true });
+  bootstrap();
 })();
