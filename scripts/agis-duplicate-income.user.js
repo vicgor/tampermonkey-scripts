@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         CreditSmile - дублировать приход
+// @name         AGIS - дублировать приход
 // @namespace    agis.duplicate.income
 // @version      2.3
 // @description  Клик по строке прихода → открыть форму создания и автозаполнить (дата, шлюз, внешний ID, сумма). Ручное подтверждение.
@@ -104,14 +104,14 @@
   }
 
   const GATEWAY_MAP = {
-    'EuroAlliance': 'Евроальянс', 'Евроальянс': 'Евроальянс',
-    'Tinkoff': 'Tinkoff', 'Тинькофф': 'Tinkoff',
+    'EuroAlliance': 'Евроальянс', 'Евроальянс': 'Евроальянс', 'MI_EuroAlliance': 'Евроальянс',
+    'Tinkoff': 'Tinkoff', 'Тинькофф': 'Tinkoff', 'MI_Tinkoff': 'Tinkoff',
     'Alfa': 'Альфа-Банк', 'Альфа-Банк': 'Альфа-Банк',
-    'Qiwi': 'Qiwi', 'Почта России': 'Почта России',
-    'Korona': 'Korona', 'Contact': 'Contact', 'Elecsnet': 'Elecsnet',
-    'СИАБ-Банк': 'СИАБ-Банк', 'ТКБ Банк': 'ТКБ Банк',
-    'Твои платежи': 'Твои платежи', 'Цессия': 'Цессия',
-    'Возврат продукта': 'Возврат продукта', 'Иное': 'Иное',
+    'Qiwi': 'Qiwi', 'Почта России': 'Почта России', 'MI_RussianPost': 'Почта России',
+    'Korona': 'Korona', 'Contact': 'Contact', 'Elecsnet': 'Elecsnet', 'MI_Elecsnet': 'Elecsnet',
+    'СИАБ-Банк': 'СИАБ-Банк', 'ТКБ Банк': 'ТКБ Банк', 'FINSTAR': 'СИАБ-Банк', 'MI_Siab': 'СИАБ-Банк',
+    'Твои платежи': 'Твои платежи', 'Цессия': 'Цессия', 'MI_Cession': 'Цессия',
+    'Возврат продукта': 'Возврат продукта', 'Иное': 'Иное', 'MI_Refund_product': 'Возврат продукта'
   };
 
   function cellText(td) { return td ? td.textContent.replace(/\s+/g, ' ').trim() : ''; }
