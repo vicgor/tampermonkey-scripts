@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CreditSmile - дублировать приход
 // @namespace    agis.duplicate.income
-// @version      2.1
+// @version      2.2
 // @description  Клик по строке прихода → открыть форму создания и автозаполнить (дата, шлюз, внешний ID, сумма). Ручное подтверждение.
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan*/*/income/*
@@ -22,16 +22,14 @@
   const STORAGE_KEY  = 'agis_dup_income_payload';
   const WAIT_TIMEOUT = 15000;
 
-  // --- DEBUG-флаг ---
-  // В @sandbox DOM GM_getValue синхронный — возвращает значение напрямую, без Promise.
-  // .then() здесь нельзя — читаем напрямую.
+  // В @sandbox DOM GM_getValue/setValue синхронные — .then() недоступен
   let DEBUG = !!GM_getValue('debug_dup', false);
 
   GM_registerMenuCommand(
     `Debug-логи: ${DEBUG ? '✅ вкл' : '⬜ выкл'} — нажмите для переключения`,
     () => {
       DEBUG = !DEBUG;
-      GM_setValue('debug_dup', DEBUG); // sync запись — в DOM-sandbox тоже синхронная
+      GM_setValue('debug_dup', DEBUG);
       alert(`[${SCRIPT_NS}] Debug-логи ${DEBUG ? 'включены' : 'выключены'}. Обновите страницу.`);
     }
   );
@@ -39,7 +37,6 @@
   const log  = (...a) => { if (DEBUG) console.log(`[${SCRIPT_NS}]`, ...a); };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
 
-  // --- Трекинг observers и таймеров ---
   const observers     = new Set();
   const timers        = new Set();
   const storageTimers = new Map();
@@ -49,13 +46,6 @@
     const t = setTimeout(() => { timers.delete(t); cb(); }, delay);
     timers.add(t);
     return t;
-  }
-
-  function debounce(fn, wait = 250) {
-    let t = null;
-    function d(...args) { clearTimeout(t); t = setTimeout(() => fn.apply(this, args), wait); }
-    d.cancel = () => { clearTimeout(t); t = null; };
-    return d;
   }
 
   function cleanupRoute() {
@@ -71,9 +61,7 @@
     storageTimers.clear();
   }
 
-  // --- Хранилище ---
-  // storageGet используется внутри async-функций через await.
-  // await на синхронном значении просто возвращает его как есть — безопасно.
+  // storageGet/storageSet — await внутри async-функций; await на синхронном значении безопасен
   async function storageGet(key, fallback = null) {
     try {
       const v = await GM_getValue(key, fallback);
@@ -81,14 +69,12 @@
     } catch (e) { warn('GM_getValue ошибка:', key, e); return fallback; }
   }
 
-  // storageSet внутри async-функций через await.
-  // Прямой вызов (без await/then) — только там, где не важно дождаться подтверждения.
   async function storageSet(key, value) {
     try { await GM_setValue(key, value); }
     catch (e) { warn('GM_setValue ошибка:', key, e); }
   }
 
-  // --- DOM-ожидание через MutationObserver ---
+  // Ожидание DOM-элемента через MutationObserver (без setInterval)
   function waitForElement(selector, { root = document, timeout = WAIT_TIMEOUT } = {}) {
     return new Promise((resolve, reject) => {
       let done = false, observer = null;
@@ -119,7 +105,6 @@
     });
   }
 
-  // --- Маппинг шлюзов ---
   const GATEWAY_MAP = {
     'EuroAlliance': 'Евроальянс', 'Евроальянс': 'Евроальянс',
     'Tinkoff': 'Tinkoff', 'Тинькофф': 'Tinkoff',
@@ -150,19 +135,29 @@
     return `${m[3]}-${pad(mon)}-${pad(m[1])} ${pad(m[4])}:${m[5]}:${m[6]}`;
   }
 
-  // --- Страница списка ---
-  function initListPage() {
-    const table = document.querySelector('table.sonata-ba-list, table.table');
-    if (!table) { warn('Таблица не найдена'); return; }
+  // --- Страница списка: ждём таблицу, потом навешиваем обработчики ---
+  async function initListPage(token) {
+    let table;
+    try {
+      // Таблица появляется асинхронно — document-start не гарантирует её наличие
+      table = await waitForElement(
+        'table.sonata-ba-list, table.table',
+        { timeout: WAIT_TIMEOUT }
+      );
+    } catch (e) {
+      warn('Таблица не появилась за', WAIT_TIMEOUT, 'мс:', e.message);
+      return;
+    }
+    if (token !== routeToken) return; // SPA-переход пока ждали
 
     const headerCells = table.querySelectorAll('thead th');
     const colIndex = {};
     headerCells.forEach((th, i) => {
       const t = th.textContent.trim().toLowerCase();
-      if (t.includes('дата'))           colIndex.date    = i;
-      if (t.includes('платежный шлюз')) colIndex.gateway = i;
+      if (t.includes('дата'))                      colIndex.date    = i;
+      if (t.includes('платежный шлюз'))            colIndex.gateway = i;
       if (t === 'платеж' || t.startsWith('платеж')) colIndex.payment = i;
-      if (t.includes('внешний id'))     colIndex.extId   = i;
+      if (t.includes('внешний id'))                colIndex.extId   = i;
     });
     log('Колонки:', colIndex);
 
@@ -187,8 +182,6 @@
         payload.amount         = extractTotal(payload.paymentText);
         payload.dateNormalized = normalizeDate(payload.date);
         log('Пайлоад:', payload);
-
-        // await нельзя в обычном клик-хандлере — оборачиваем в async IIFE
         ;(async () => {
           await storageSet(STORAGE_KEY, JSON.stringify(payload));
           location.href = location.pathname.replace(/\/income\/.*/, '/income/create');
@@ -201,19 +194,18 @@
   // --- Страница создания ---
   async function initCreatePage(token) {
     const raw = await storageGet(STORAGE_KEY, null);
-    if (token !== routeToken) return;  // [1]
+    if (token !== routeToken) return;
     if (!raw) return;
 
     let data;
     try { data = JSON.parse(raw); } catch (e) { warn('Неверный payload:', e); return; }
 
-    // Удаляем сразу — F5 не заполнит форму повторно
-    await storageSet(STORAGE_KEY, null);
+    await storageSet(STORAGE_KEY, null); // сброс — F5 не заполнит повторно
     if (token !== routeToken) return;
 
     try { await waitForElement('input[name$="[incomeDate]"]', { timeout: 10000 }); }
     catch (e) { warn('Форма не появилась:', e.message); return; }
-    if (token !== routeToken) return;  // [2]
+    if (token !== routeToken) return;
 
     fillForm(data);
   }
@@ -260,11 +252,13 @@
   async function bootstrap() {
     const token = ++routeToken;
     cleanupRoute();
+    // Ждём body (document-start — DOM ещё может быть пустым)
     try { await waitForElement('body'); } catch (e) { warn('body:', e.message); return; }
     if (token !== routeToken) return;
 
     const path = location.pathname;
-    if (/\/income\/list/.test(path) || /\/income\/?$/.test(path)) initListPage();
+    // Оба пути async — await, чтобы ошибки всплывали корректно
+    if (/\/income\/list/.test(path) || /\/income\/?$/.test(path)) await initListPage(token);
     if (/\/income\/create/.test(path)) await initCreatePage(token);
   }
 
