@@ -1,14 +1,13 @@
 // ==UserScript==
-// @name         AGIS loannote linkify
-// @namespace    victor.goryachko.tm
-// @version      2.8
+// @name         AGIS - linkify loannote
+// @namespace    agis.linkify.loannote
+// @version      2.9
 // @description  Делает ссылки кликабельными в колонке "Контент" на страницах loannote/list
 // @match        https://agis.volgazaim.ru/admin/*/loannote/list*
 // @match        https://agis.creditsmile.ru/admin/*/loannote/list*
 // @match        https://agis.moneymania.ru/admin/*/loannote/list*
-// @match        http://agis.volgazaim.ru/admin/*/loannote/list*
-// @match        http://agis.creditsmile.ru/admin/*/loannote/list*
-// @match        http://agis.moneymania.ru/admin/*/loannote/list*
+// @match        https://agis.berrycash.ru/admin/*/loannote/list*
+// @match        https://agis.belkacredit.ru/admin/*/loannote/list*
 // @run-at       document-idle
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -18,25 +17,25 @@
 (function () {
     'use strict';
 
+    const SCRIPT_NS = 'agis-linkify';
     const JIRA_BASE = 'https://jira.aventus.work/browse/';
 
-    // Флаг читается из постоянного хранилища; по умолчанию false
-    let DEBUG = GM_getValue('debug', false);
+    // Ключ с namespace — не конфликтует с другими скриптами на том же домене
+    let DEBUG = GM_getValue('debug_linkify', false);
 
-    // Пункт меню в Tampermonkey для переключения DEBUG без правки кода
     GM_registerMenuCommand(
         `Debug-логи: ${DEBUG ? '✅ вкл' : '⬜ выкл'} — нажмите для переключения`,
         () => {
             DEBUG = !DEBUG;
-            GM_setValue('debug', DEBUG);
-            alert(`[TM loannote] Debug-логи ${DEBUG ? 'включены' : 'выключены'}. Обновите страницу.`);
+            GM_setValue('debug_linkify', DEBUG);
+            alert(`[${SCRIPT_NS}] Debug-логи ${DEBUG ? 'включены' : 'выключены'}. Обновите страницу.`);
         }
     );
 
     const processedCells = new WeakSet();
 
     function log(...args) {
-        if (DEBUG) console.log('[TM loannote]', ...args);
+        if (DEBUG) console.log(`[${SCRIPT_NS}]`, ...args);
     }
 
     function addStyles() {
@@ -167,7 +166,7 @@
     }
 
     function main() {
-        log('init, DEBUG=true');
+        log(`init, DEBUG=${DEBUG}`);
         addStyles();
         scan();
         observe();
