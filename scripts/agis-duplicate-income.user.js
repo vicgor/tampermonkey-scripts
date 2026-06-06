@@ -1,13 +1,15 @@
 // ==UserScript==
 // @name         AGIS - дублировать приход
 // @namespace    agis.duplicate.income
-// @version      2.4
+// @version      2.5
 // @description  Клик по строке прихода → открыть форму создания и автозаполнить (дата, шлюз, внешний ID, сумма). Ручное подтверждение.
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.berrycash.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.moneymania.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.belkacredit.ru/admin/agis2/core/loan*/*/income/*
+// @match        https://agis.credit7.ru/admin/agis2/core/loan*/*/income/*
+// @match        https://agis.credit365.ru/admin/agis2/core/loan*/*/income/*
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_setValue
@@ -40,11 +42,19 @@
   const observers  = new Set();
   const timers     = new Set();
   let   routeToken = 0;
+  let   lastUrl    = location.href;
 
   function setManagedTimeout(cb, delay) {
     const t = setTimeout(() => { timers.delete(t); cb(); }, delay);
     timers.add(t);
     return t;
+  }
+
+  function debounce(fn, wait = 250) {
+    let timer = null;
+    function debounced(...args) { clearTimeout(timer); timer = setTimeout(() => fn.apply(this, args), wait); }
+    debounced.cancel = () => { clearTimeout(timer); timer = null; };
+    return debounced;
   }
 
   function cleanupRoute() {
@@ -55,6 +65,29 @@
   }
 
   function cleanup() { cleanupRoute(); }
+
+  function onUrlChange(callback) {
+    const check = debounce(() => {
+      if (location.href === lastUrl) return;
+      lastUrl = location.href;
+      callback(location.href);
+    }, 100);
+    const origPush    = history.pushState;
+    const origReplace = history.replaceState;
+    history.pushState    = function (...a) { const r = origPush.apply(this, a);    check(); return r; };
+    history.replaceState = function (...a) { const r = origReplace.apply(this, a); check(); return r; };
+    window.addEventListener('popstate',   check);
+    window.addEventListener('hashchange', check);
+    const interval = setInterval(check, 1000);
+    return () => {
+      history.pushState    = origPush;
+      history.replaceState = origReplace;
+      window.removeEventListener('popstate',   check);
+      window.removeEventListener('hashchange', check);
+      clearInterval(interval);
+      check.cancel();
+    };
+  }
 
   async function storageGet(key, fallback = null) {
     try {
@@ -72,10 +105,11 @@
     return new Promise((resolve, reject) => {
       let done = false, observer = null;
       const query = () => { try { return root.querySelector(selector); } catch { return null; } };
+      let timeoutTimer = null;
       const finish = (el) => {
         if (done) return; done = true;
         observer?.disconnect(); observers.delete(observer);
-        clearTimeout(timeoutTimer); timers.delete(timeoutTimer);
+        if (timeoutTimer !== null) { clearTimeout(timeoutTimer); timers.delete(timeoutTimer); }
         resolve(el);
       };
       const fail = () => {
@@ -83,8 +117,8 @@
         observer?.disconnect(); observers.delete(observer);
         reject(new Error(`waitForElement: "${selector}" не найден за ${timeout}мс`));
       };
-      const ex = query(); if (ex) { resolve(ex); return; }
-      const timeoutTimer = setManagedTimeout(fail, timeout);
+      const ex = query(); if (ex) { finish(ex); return; }
+      timeoutTimer = setManagedTimeout(fail, timeout);
       const startObserve = () => {
         if (done) return;
         const r = root === document ? (document.documentElement || document.body) : root;
@@ -194,7 +228,7 @@
       if (isCancelled) tr.classList.add('cs-cancelled');
       tr.title = isCancelled ? 'Статус: Отменен. Клик: дублировать' : 'Клик: дублировать этот приход';
 
-      tr.addEventListener('click', (e) => {
+      tr.addEventListener('click', async (e) => {
         if (e.target.closest('a, button, input, label, .btn')) return;
         e.preventDefault();
         const cells = tr.children;
@@ -207,10 +241,8 @@
         payload.amount         = extractTotal(payload.paymentText);
         payload.dateNormalized = normalizeDate(payload.date);
         log('Пайлоад:', payload);
-        ;(async () => {
-          await storageSet(STORAGE_KEY, JSON.stringify(payload));
-          location.href = location.pathname.replace(/\/income\/.*/, '/income/create');
-        })();
+        await storageSet(STORAGE_KEY, JSON.stringify(payload));
+        location.href = location.pathname.replace(/\/income\/.*/, '/income/create');
       });
     });
     log('Список готов, строк:', rows.length);
@@ -286,6 +318,12 @@
     if (/\/income\/create/.test(path)) await initCreatePage(token);
   }
 
-  window.addEventListener('pagehide', cleanup, { once: true });
+  const stopUrlWatcher = onUrlChange(() => bootstrap());
+
+  window.addEventListener('pagehide', () => {
+    cleanup();
+    stopUrlWatcher();
+  }, { once: true });
+
   bootstrap();
 })();
