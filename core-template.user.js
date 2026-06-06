@@ -44,8 +44,9 @@
   // например table-observerа. Чистится в cleanupRoute.
   let stopExtraObserver = null;
 
-  // [#4] Guard против повторного вызова onUrlChange.
+  // Guard против повторного вызова onUrlChange.
   // onUrlChange должен вызываться ровно один раз за время жизни страницы.
+  // НЕ сбрасывается в cleanupRoute — только в stopFn от явного вызова stopUrlWatcher().
   let urlChangeInstalled = false;
 
   // setTimeout, который регистрируется в наборе и авто-удаляется по завершении
@@ -70,6 +71,7 @@
   // cleanupRoute — вызывай в начале каждого bootstrap.
   // Чистит observerы waitForElement и таймеры текущего маршрута.
   // stopExtraObserver (от observeAddedElements) отключается отдельно — через сохранённый stopFn.
+  // urlChangeInstalled НЕ сбрасывается — onUrlChange живёт весь жизненный цикл страницы.
   function cleanupRoute() {
     for (const o of observers) o.disconnect();
     observers.clear();
@@ -95,7 +97,7 @@
     } catch (e) { warn('GM_getValue ошибка:', key, e); return fallback; }
   }
 
-  // [#3] Фабрика debounced-записей. Возвращает функцию (value) => void.
+  // Фабрика debounced-записей. Возвращает функцию (value) => void.
   // Использование:
   //   const saveCount = storageSetDebounced('processedCount', 800);
   //   saveCount(processedCount);
@@ -122,10 +124,14 @@
 
       const query = () => { try { return root.querySelector(selector); } catch (_) { return null; } };
 
+      // timeoutTimer объявляется ДО finish/fail, чтобы избежать TDZ при
+      // раннем вызове finish(existing) ещё до setManagedTimeout.
+      let timeoutTimer = null;
+
       const finish = (el) => {
         if (done) return; done = true;
         if (observer) { observer.disconnect(); observers.delete(observer); }
-        clearTimeout(timeoutTimer); timers.delete(timeoutTimer);
+        if (timeoutTimer !== null) { clearTimeout(timeoutTimer); timers.delete(timeoutTimer); }
         resolve(el);
       };
       const fail = () => {
@@ -136,11 +142,11 @@
       };
 
       const existing = query();
-      // [#2] Используем finish() вместо прямого resolve() — выставляет done=true,
-      // предотвращает двойной resolve при гонке на document-start.
+      // finish() выставляет done=true — предотвращает двойной resolve при гонке.
+      // timeoutTimer ещё null — проверка !== null внутри finish безопасно пропускает clearTimeout.
       if (existing) { finish(existing); return; }
 
-      const timeoutTimer = setManagedTimeout(fail, timeout);
+      timeoutTimer = setManagedTimeout(fail, timeout);
 
       // Если documentElement ещё нет (ранний document-start) — повторяем через 50 мс
       const startObserve = () => {
@@ -159,7 +165,7 @@
   }
 
   // Вызывает callback для каждого нового подходящего элемента.
-  // [#1] Observer НЕ добавляется в observers Set — владение только через возвращаемый stopFn.
+  // Observer НЕ добавляется в observers Set — владение только через возвращаемый stopFn.
   // cleanupRoute() отключает этот observer через stopExtraObserver, а не через observers.clear().
   function observeAddedElements(selector, callback, { root = document.documentElement } = {}) {
     const seen = new WeakSet();
@@ -232,8 +238,9 @@
   // Перехватывает pushState/replaceState + popstate + hashchange.
   // Дополнительный setInterval 1с — запасной механизм для фреймворков, не отправляющих History API события.
   // Возвращает stopFn — вызвать чтобы полностью очистить подписки при pagehide.
-  // [#4] ВАЖНО: вызывать только один раз за время жизни страницы.
+  // ВАЖНО: вызывать только один раз за время жизни страницы.
   // Повторный вызов вернёт no-op stopFn и выдаст предупреждение в консоль.
+  // urlChangeInstalled сбрасывается только через явный вызов stopFn — не в cleanupRoute.
   function onUrlChange(callback) {
     if (urlChangeInstalled) {
       warn('onUrlChange уже установлен — повторный вызов игнорируется. Вызывай только один раз.');
@@ -280,7 +287,8 @@
     cleanupRoute(); // всегда первым действием
     log('Инициализация:', reason);
 
-    // [#3] Создаём debounced-сохранялки один раз в bootstrap
+    // saveCacheKey — debounced-запись для этого маршрута.
+    // Создаётся при каждом bootstrap; таймер хранится в storageTimers, не в timers.
     const saveCacheKey = storageSetDebounced('my-cache-key', 300);
 
     try {
