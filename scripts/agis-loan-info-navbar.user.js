@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      4.6
+// @version      4.7
 // @description  Полноширинная строка под навбаром с информацией о займе и цветным статусом
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*
@@ -44,6 +44,7 @@
     let routeToken = 0;
     let lastUrl    = location.href;
     let lastRenderSignature = '';
+    let urlChangeInstalled  = false;
 
     const observers    = new Set();
     const timers       = new Set();
@@ -203,7 +204,14 @@
         return () => obs.disconnect();
     }
 
+    // onUrlChange должен вызываться ровно один раз за время жизни страницы.
     function onUrlChange(callback) {
+        if (urlChangeInstalled) {
+            console.warn(`[${SCRIPT_NAME}] onUrlChange уже установлен — повторный вызов игнорируется.`);
+            return () => {};
+        }
+        urlChangeInstalled = true;
+
         const check = debounce(() => {
             if (location.href === lastUrl) return;
             lastUrl = location.href;
@@ -225,6 +233,7 @@
             window.removeEventListener('hashchange', check);
             clearInterval(interval);
             check.cancel();
+            urlChangeInstalled = false;
         };
     }
 

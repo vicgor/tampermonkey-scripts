@@ -29,7 +29,8 @@
     const boundInputs = new WeakSet();
     const cleanupTasks = new Set();
 
-    let domObserverStop = null;
+    let domObserverStop      = null;
+    let urlChangeInstalled   = false;
 
     function warn(...args) {
         console.warn(`[${SCRIPT_NS}]`, ...args);
@@ -128,7 +129,14 @@
     }
 
     // SPA: патчим history.pushState/replaceState + popstate вместо setInterval.
+    // Вызывать только один раз — повторный вызов вернёт no-op.
     function onUrlChange(callback) {
+        if (urlChangeInstalled) {
+            warn('onUrlChange уже установлен — повторный вызов игнорируется.');
+            return () => {};
+        }
+        urlChangeInstalled = true;
+
         let lastUrl = location.href;
 
         const notify = () => {
@@ -158,6 +166,7 @@
             history.replaceState = origReplace;
             window.removeEventListener('popstate', notify);
             window.removeEventListener('hashchange', notify);
+            urlChangeInstalled = false;
         };
 
         addCleanup(stop);

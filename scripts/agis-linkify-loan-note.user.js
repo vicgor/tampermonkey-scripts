@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - linkify loannote
 // @namespace    agis.linkify.loannote
-// @version      2.9
+// @version      2.10
 // @description  Делает ссылки кликабельными в колонке "Контент" на страницах loannote/list
 // @match        https://agis.volgazaim.ru/admin/*/loannote/list*
 // @match        https://agis.creditsmile.ru/admin/*/loannote/list*
@@ -20,7 +20,7 @@
     const SCRIPT_NS = 'agis-linkify';
     const JIRA_BASE = 'https://jira.aventus.work/browse/';
 
-    // Ключ с namespace — не конфликтует с другими скриптами на том же домене
+    // В @sandbox DOM GM_getValue синхронна — await не требуется.
     let DEBUG = GM_getValue('debug_linkify', false);
 
     GM_registerMenuCommand(
@@ -151,16 +151,10 @@
     }
 
     function observe() {
-        let scanning = false;
         let timer = null;
         const observer = new MutationObserver(() => {
-            if (scanning) return;
             clearTimeout(timer);
-            timer = setTimeout(() => {
-                scanning = true;
-                scan();
-                scanning = false;
-            }, 300);
+            timer = setTimeout(scan, 300);
         });
         observer.observe(document.body, { childList: true, subtree: true });
     }
