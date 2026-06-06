@@ -419,7 +419,7 @@
                     if (hasUsefulData(data)) resolve(data);
                     else reject(new Error('fetchFromBackend: no useful data in /show response'));
                 },
-                onerror:   () => reject(new Error(`fetchFromBackend: network error (${url})`)),
+                onerror:   (_e) => reject(new Error(`fetchFromBackend: network error (${url})`)),
                 ontimeout: () => reject(new Error(`fetchFromBackend: timeout (${url})`)),
             });
         });

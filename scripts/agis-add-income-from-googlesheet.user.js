@@ -37,6 +37,7 @@
 
   let routeToken = 0;
   let lastUrl    = location.href;
+  let urlChangeInstalled = false;
 
   function setManagedTimeout(cb, delay) {
     const t = setTimeout(() => { timers.delete(t); cb(); }, delay);
@@ -261,7 +262,14 @@
     }
   });
 
+  // onUrlChange должен вызываться ровно один раз за время жизни страницы.
+  // Повторный вызов вернёт no-op stopFn и выдаст предупреждение.
   function onUrlChange(callback) {
+    if (urlChangeInstalled) {
+      warn('onUrlChange уже установлен — повторный вызов игнорируется.');
+      return () => {};
+    }
+    urlChangeInstalled = true;
     const check = debounce(() => {
       if (location.href === lastUrl) return;
       lastUrl = location.href;
@@ -281,6 +289,7 @@
       window.removeEventListener('hashchange', check);
       clearInterval(interval);
       check.cancel();
+      urlChangeInstalled = false;
     };
   }
 

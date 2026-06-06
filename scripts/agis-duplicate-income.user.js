@@ -39,10 +39,12 @@
   const log  = (...a) => { if (DEBUG) console.log(`[${SCRIPT_NS}]`, ...a); };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
 
-  const observers  = new Set();
-  const timers     = new Set();
+  const observers    = new Set();
+  const timers       = new Set();
+  const storageTimers = new Map();
   let   routeToken = 0;
   let   lastUrl    = location.href;
+  let   urlChangeInstalled = false;
 
   function setManagedTimeout(cb, delay) {
     const t = setTimeout(() => { timers.delete(t); cb(); }, delay);
@@ -64,9 +66,20 @@
     timers.clear();
   }
 
-  function cleanup() { cleanupRoute(); }
+  function cleanup() {
+    cleanupRoute();
+    for (const t of storageTimers.values()) clearTimeout(t);
+    storageTimers.clear();
+  }
 
+  // onUrlChange должен вызываться ровно один раз за время жизни страницы.
+  // Повторный вызов вернёт no-op stopFn и выдаст предупреждение.
   function onUrlChange(callback) {
+    if (urlChangeInstalled) {
+      warn('onUrlChange уже установлен — повторный вызов игнорируется.');
+      return () => {};
+    }
+    urlChangeInstalled = true;
     const check = debounce(() => {
       if (location.href === lastUrl) return;
       lastUrl = location.href;
@@ -86,6 +99,7 @@
       window.removeEventListener('hashchange', check);
       clearInterval(interval);
       check.cancel();
+      urlChangeInstalled = false;
     };
   }
 
