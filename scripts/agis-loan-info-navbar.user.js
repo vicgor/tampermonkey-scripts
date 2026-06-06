@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      4.5
+// @version      4.6
 // @description  Полноширинная строка под навбаром с информацией о займе и цветным статусом
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*
@@ -140,10 +140,11 @@
 
             const query = () => { try { return root.querySelector(selector); } catch (_) { return null; } };
 
+            let timeoutTimer = null;
             const finish = (el) => {
                 if (done) return; done = true;
                 if (observer) { observer.disconnect(); observers.delete(observer); }
-                clearTimeout(timeoutTimer); timers.delete(timeoutTimer);
+                if (timeoutTimer !== null) { clearTimeout(timeoutTimer); timers.delete(timeoutTimer); }
                 resolve(el);
             };
             const fail = () => {
@@ -153,9 +154,9 @@
             };
 
             const existing = query();
-            if (existing) { resolve(existing); return; }
+            if (existing) { finish(existing); return; }
 
-            const timeoutTimer = setManagedTimeout(fail, timeout);
+            timeoutTimer = setManagedTimeout(fail, timeout);
 
             const startObserve = () => {
                 if (done) return;
@@ -407,6 +408,7 @@
             GM_xmlhttpRequest({
                 method: 'GET',
                 url,
+                timeout: 20000,
                 onload: (resp) => {
                     if (resp.status !== 200) {
                         reject(new Error(`fetchFromBackend: HTTP ${resp.status} (${url})`));
@@ -417,7 +419,8 @@
                     if (hasUsefulData(data)) resolve(data);
                     else reject(new Error('fetchFromBackend: no useful data in /show response'));
                 },
-                onerror: (e) => reject(new Error(`fetchFromBackend: network error (${url})`)),
+                onerror:   (_e) => reject(new Error(`fetchFromBackend: network error (${url})`)),
+                ontimeout: () => reject(new Error(`fetchFromBackend: timeout (${url})`)),
             });
         });
     }

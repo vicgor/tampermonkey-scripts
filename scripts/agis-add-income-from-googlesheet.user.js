@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS автозаполнение из Google Sheets
 // @namespace    agis.income.googlesheet
-// @version      4.0
+// @version      4.1
 // @description  Автозаполнение формы AGIS из Google Таблицы (CSV Publish). Запрос через GM_xmlhttpRequest (обходит CSP).
 // @match        https://agis.creditsmile.ru/*/loan*/*/income/create
 // @match        https://agis.belkacredit.ru/*/loan*/*/income/create
@@ -36,6 +36,8 @@
   const storageTimers = new Map();
 
   let routeToken = 0;
+  let lastUrl    = location.href;
+  let urlChangeInstalled = false;
 
   function setManagedTimeout(cb, delay) {
     const t = setTimeout(() => { timers.delete(t); cb(); }, delay);
@@ -88,10 +90,11 @@
       let done = false;
       let observer = null;
       const query = () => { try { return root.querySelector(selector); } catch (_) { return null; } };
+      let timeoutTimer = null;
       const finish = (el) => {
         if (done) return; done = true;
         if (observer) { observer.disconnect(); observers.delete(observer); }
-        clearTimeout(timeoutTimer); timers.delete(timeoutTimer);
+        if (timeoutTimer !== null) { clearTimeout(timeoutTimer); timers.delete(timeoutTimer); }
         resolve(el);
       };
       const fail = () => {
@@ -100,8 +103,8 @@
         reject(new Error(`waitForElement: "${selector}" не найден за ${timeout} мс`));
       };
       const ex = query();
-      if (ex) { resolve(ex); return; }
-      const timeoutTimer = setManagedTimeout(fail, timeout);
+      if (ex) { finish(ex); return; }
+      timeoutTimer = setManagedTimeout(fail, timeout);
       const startObserve = () => {
         if (done) return;
         const root2 = root === document ? (document.documentElement || document.body) : root;
@@ -259,6 +262,37 @@
     }
   });
 
+  // onUrlChange должен вызываться ровно один раз за время жизни страницы.
+  // Повторный вызов вернёт no-op stopFn и выдаст предупреждение.
+  function onUrlChange(callback) {
+    if (urlChangeInstalled) {
+      warn('onUrlChange уже установлен — повторный вызов игнорируется.');
+      return () => {};
+    }
+    urlChangeInstalled = true;
+    const check = debounce(() => {
+      if (location.href === lastUrl) return;
+      lastUrl = location.href;
+      callback(location.href);
+    }, 100);
+    const origPush    = history.pushState;
+    const origReplace = history.replaceState;
+    history.pushState    = function (...a) { const r = origPush.apply(this, a);    check(); return r; };
+    history.replaceState = function (...a) { const r = origReplace.apply(this, a); check(); return r; };
+    window.addEventListener('popstate',   check);
+    window.addEventListener('hashchange', check);
+    const interval = setInterval(check, 1000);
+    return () => {
+      history.pushState    = origPush;
+      history.replaceState = origReplace;
+      window.removeEventListener('popstate',   check);
+      window.removeEventListener('hashchange', check);
+      clearInterval(interval);
+      check.cancel();
+      urlChangeInstalled = false;
+    };
+  }
+
   // --- Точка входа ---
   async function bootstrap() {
     const token = ++routeToken;
@@ -333,6 +367,12 @@
   }
 
   // --- Запуск ---
-  window.addEventListener('pagehide', cleanup, { once: true });
+  const stopUrlWatcher = onUrlChange(() => bootstrap());
+
+  window.addEventListener('pagehide', () => {
+    cleanup();
+    stopUrlWatcher();
+  }, { once: true });
+
   bootstrap();
 })();
