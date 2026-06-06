@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Robust Core Template
 // @namespace    domain.feature        // <- заменить: например agis.loaninfo
-// @version      0.3
+// @version      0.4
 // @description  Устойчивое ядро: ожидание DOM, GM_xmlhttpRequest, debounced GM_setValue, SPA-навигация, routeToken x4, cleanup
 // @author       me
 // @match        https://example.com/path/*    // <- заменить на реальный домен
@@ -27,6 +27,8 @@
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
 
   // --- Трекинг всех observerов и таймеров ---
+  // Внимание: observers содержит ТОЛЬКО наблюдатели waitForElement.
+  // observeAddedElements НЕ добавляет в этот Set — владение только через stopFn.
   const observers    = new Set();
   const timers       = new Set();
   const storageTimers = new Map();
@@ -41,6 +43,10 @@
   // Функция для внешних stopObserver: хранит функцию отключения дополнительных observerов,
   // например table-observerа. Чистится в cleanupRoute.
   let stopExtraObserver = null;
+
+  // [#4] Guard против повторного вызова onUrlChange.
+  // onUrlChange должен вызываться ровно один раз за время жизни страницы.
+  let urlChangeInstalled = false;
 
   // setTimeout, который регистрируется в наборе и авто-удаляется по завершении
   function setManagedTimeout(callback, delay) {
@@ -62,7 +68,8 @@
   }
 
   // cleanupRoute — вызывай в начале каждого bootstrap.
-  // Чистит observerы и таймеры текущего маршрута, не трогая сторадж-таймеры.
+  // Чистит observerы waitForElement и таймеры текущего маршрута.
+  // stopExtraObserver (от observeAddedElements) отключается отдельно — через сохранённый stopFn.
   function cleanupRoute() {
     for (const o of observers) o.disconnect();
     observers.clear();
@@ -88,16 +95,21 @@
     } catch (e) { warn('GM_getValue ошибка:', key, e); return fallback; }
   }
 
-  // Частые записи через debounce — защита от избыточных write-запросов к GM.
-  function storageSetDebounced(key, value, wait = 300) {
-    const old = storageTimers.get(key);
-    if (old) clearTimeout(old);
-    const timer = setTimeout(async () => {
-      storageTimers.delete(key);
-      try { await GM_setValue(key, value); }
-      catch (e) { warn('GM_setValue ошибка:', key, e); }
-    }, wait);
-    storageTimers.set(key, timer);
+  // [#3] Фабрика debounced-записей. Возвращает функцию (value) => void.
+  // Использование:
+  //   const saveCount = storageSetDebounced('processedCount', 800);
+  //   saveCount(processedCount);
+  function storageSetDebounced(key, wait = 300) {
+    return function (value) {
+      const old = storageTimers.get(key);
+      if (old) clearTimeout(old);
+      const timer = setTimeout(async () => {
+        storageTimers.delete(key);
+        try { await GM_setValue(key, value); }
+        catch (e) { warn('GM_setValue ошибка:', key, e); }
+      }, wait);
+      storageTimers.set(key, timer);
+    };
   }
 
   // --- DOM-ожидание ---
@@ -124,7 +136,9 @@
       };
 
       const existing = query();
-      if (existing) { resolve(existing); return; }
+      // [#2] Используем finish() вместо прямого resolve() — выставляет done=true,
+      // предотвращает двойной resolve при гонке на document-start.
+      if (existing) { finish(existing); return; }
 
       const timeoutTimer = setManagedTimeout(fail, timeout);
 
@@ -144,7 +158,9 @@
     });
   }
 
-  // Вызывает callback для каждого нового подходящего элемента
+  // Вызывает callback для каждого нового подходящего элемента.
+  // [#1] Observer НЕ добавляется в observers Set — владение только через возвращаемый stopFn.
+  // cleanupRoute() отключает этот observer через stopExtraObserver, а не через observers.clear().
   function observeAddedElements(selector, callback, { root = document.documentElement } = {}) {
     const seen = new WeakSet();
     const process = (node) => {
@@ -159,13 +175,13 @@
       for (const m of muts) for (const n of m.addedNodes) process(n);
     });
     observer.observe(root, { childList: true, subtree: true });
-    observers.add(observer);
-    return () => { observer.disconnect(); observers.delete(observer); }; // возвращает stopFn
+    // Не добавляем в observers — только stopFn
+    return () => { observer.disconnect(); };
   }
 
   // --- Сетевые запросы через GM_xmlhttpRequest (обходит CSP сайта) ---
   // Домены должны быть перечислены в @connect по одному на каждый хост.
-  // GM_xmlhttpRequest может отправить одно событие progress — не используй его для потроковой качки.
+  // GM_xmlhttpRequest может отправить одно событие progress — не используй его для потоковой качки.
   function httpRequest(details) {
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
@@ -200,7 +216,7 @@
       return { status: r.status, data: r.response, finalUrl: r.finalUrl || url };
     },
     // HTML GET — получает HTML и парсит в Document через DOMParser.
-    // Используй когда нужно работать с DOM ответа (querySelectorAll, parseDoc и т.d.).
+    // Используй когда нужно работать с DOM ответа (querySelectorAll, parseDoc и т.д.).
     async getHtml(url, headers = {}) {
       const r = await httpRequest({
         method: 'GET', url,
@@ -216,7 +232,15 @@
   // Перехватывает pushState/replaceState + popstate + hashchange.
   // Дополнительный setInterval 1с — запасной механизм для фреймворков, не отправляющих History API события.
   // Возвращает stopFn — вызвать чтобы полностью очистить подписки при pagehide.
+  // [#4] ВАЖНО: вызывать только один раз за время жизни страницы.
+  // Повторный вызов вернёт no-op stopFn и выдаст предупреждение в консоль.
   function onUrlChange(callback) {
+    if (urlChangeInstalled) {
+      warn('onUrlChange уже установлен — повторный вызов игнорируется. Вызывай только один раз.');
+      return () => {}; // no-op stopFn
+    }
+    urlChangeInstalled = true;
+
     const check = debounce(() => {
       if (location.href === lastUrl) return;
       lastUrl = location.href;
@@ -239,6 +263,7 @@
       window.removeEventListener('hashchange', check);
       clearInterval(interval);
       check.cancel();
+      urlChangeInstalled = false; // сбрасываем флаг при явной остановке
     };
   }
 
@@ -254,6 +279,9 @@
     const token = ++routeToken;
     cleanupRoute(); // всегда первым действием
     log('Инициализация:', reason);
+
+    // [#3] Создаём debounced-сохранялки один раз в bootstrap
+    const saveCacheKey = storageSetDebounced('my-cache-key', 300);
 
     try {
       // [1] Ждём DOM.
@@ -281,11 +309,11 @@
         } else {
           // [4] Нет ни DOM, ни кеша — идём на бэкенд через GM_xmlhttpRequest
           try {
-            const { doc } = await api.getHtml(`https://example.com/path/data`);
+            const { doc } = await api.getHtml('https://example.com/path/data');
             // [4] Проверка токена после сетевого запроса (самый долгий await)
             if (token !== routeToken) return;
             const data = parseDoc(doc);
-            storageSetDebounced('my-cache-key', data);
+            saveCacheKey(data);
             render(data, targetEl);
           } catch (e) {
             warn('Бэкенд fallback не удался:', e.message);
@@ -293,7 +321,7 @@
         }
       } else {
         render(parsed, targetEl);
-        storageSetDebounced('my-cache-key', parsed);
+        saveCacheKey(parsed);
       }
 
       // Дополнительный observer (например, для слежения за изменениями таблиц).
