@@ -156,7 +156,7 @@ tampermonkey-scripts/
 | `observeAddedElements(selector, cb)` | Вызывает callback для каждого нового подходящего элемента |
 | `onDomReady(callback)` | Безопасный аналог DOMContentLoaded, работает с document-start |
 | `storageGet(key, fallback)` | GM_getValue с try/catch и fallback |
-| `storageSetDebounced(key, delay)` | Дебаунс-обёртка для GM_setValue (защита от частых записей) |
+| `storageSetDebounced(key, wait?)` | Фабрика: возвращает `(value) => void` с debounce-записью в GM_setValue |
 | `httpRequest(opts)` | Промис поверх GM_xmlhttpRequest |
 | `api.getJson(url, headers)` | GET-запрос, обходит CSP сайта |
 | `api.postJson(url, body, headers)` | POST-запрос, обходит CSP сайта |
@@ -232,7 +232,7 @@ tampermonkey-scripts/
 | `@match https://news.example.com/*` | Ограничили сайт |
 | Убраны `GM_xmlhttpRequest` и `@connect` | Запросы не нужны |
 | `observeAddedElements('article.news-item', ...)` | Ловим все новые карточки |
-| `storageSetDebounced('processedCount', 800)` | Редко сохраняем счётчик |
+| `const saveCount = storageSetDebounced('processedCount', 800)` | Фабрика debounced-записи счётчика |
 
 ---
 
