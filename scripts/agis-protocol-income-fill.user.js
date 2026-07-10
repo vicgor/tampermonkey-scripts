@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - вставка прихода из протокола
 // @namespace    agis.protocol.income.fill
-// @version      1.7
+// @version      1.8
 // @description  Клик по строке протокола сохраняет данные; автопереход на список приходов нужного займа; на странице создания прихода кнопка вставки заполняет форму.
 // @match        https://agis.berrycash.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
 // @match        https://agis.berrycash.ru/admin/agis2/core/loan/*/income/list*
@@ -538,7 +538,9 @@
       data.amount
     );
 
-    const success = dateOk || orderOk || amountOk;
+    // Считаем успехом только если заполнены оба критичных поля: дата и сумма.
+    // Это защищает от удаления данных из storage при частичном заполнении формы.
+    const success = dateOk && amountOk;
 
     showToast(
       [
@@ -637,8 +639,10 @@
     await initDebugFlag();
     registerMenu();
 
+    // bootstrap() вызывается без await намеренно — onUrlChange не должен блокироваться.
+    // .catch() перехватывает необработанные rejection при SPA-навигации.
     const stopUrlWatcher = onUrlChange(() => {
-      bootstrap();
+      bootstrap().catch((error) => warn('bootstrap error:', error));
     });
 
     window.addEventListener('pagehide', () => {
