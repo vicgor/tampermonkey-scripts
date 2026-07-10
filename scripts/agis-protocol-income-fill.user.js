@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - вставка прихода из протокола
 // @namespace    agis.protocol.income.fill
-// @version      1.2
+// @version      1.5
 // @description  Клик по строке протокола сохраняет данные; автопереход на список приходов нужного займа; на странице создания прихода кнопка вставки заполняет форму.
 // @match        https://agis.berrycash.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
 // @match        https://agis.berrycash.ru/admin/agis2/core/loan/*/income/*
@@ -16,7 +16,7 @@
 (() => {
   'use strict';
 
-  const SCRIPT_NS   = 'agis-protocol-income-fill';
+  const SCRIPT_NS = 'agis-protocol-income-fill';
   const STORAGE_KEY = 'agis_protocol_income_payload';
   const WAIT_TIMEOUT = 15000;
   let DEBUG = !!GM_getValue('debug_protocol_income_fill', false);
@@ -30,13 +30,13 @@
     }
   );
 
-  const log  = (...a) => { if (DEBUG) console.log(`[${SCRIPT_NS}]`, ...a); };
+  const log = (...a) => { if (DEBUG) console.log(`[${SCRIPT_NS}]`, ...a); };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
 
   const observers = new Set();
-  const timers    = new Set();
-  let routeToken  = 0;
-  let lastUrl     = location.href;
+  const timers = new Set();
+  let routeToken = 0;
+  let lastUrl = location.href;
   let urlChangeInstalled = false;
 
   function setManagedTimeout(cb, delay) {
@@ -65,7 +65,7 @@
   function onUrlChange(callback) {
     if (urlChangeInstalled) {
       warn('onUrlChange уже установлен — повторный вызов игнорируется.');
-      return () => {};
+      return () => { };
     }
     urlChangeInstalled = true;
 
@@ -75,7 +75,7 @@
       callback(location.href);
     }, 100);
 
-    const origPush    = history.pushState;
+    const origPush = history.pushState;
     const origReplace = history.replaceState;
 
     history.pushState = function (...a) {
@@ -89,14 +89,14 @@
       return r;
     };
 
-    window.addEventListener('popstate',   check);
+    window.addEventListener('popstate', check);
     window.addEventListener('hashchange', check);
     const interval = setInterval(check, 1000);
 
     return () => {
-      history.pushState    = origPush;
+      history.pushState = origPush;
       history.replaceState = origReplace;
-      window.removeEventListener('popstate',   check);
+      window.removeEventListener('popstate', check);
       window.removeEventListener('hashchange', check);
       clearInterval(interval);
       check.cancel();
@@ -124,7 +124,10 @@
       let done = false, observer = null;
       let timeoutTimer = null;
 
-      const query = () => { try { return root.querySelector(selector); } catch { return null; } };
+      const query = () => {
+        try { return root.querySelector(selector); }
+        catch { return null; }
+      };
 
       const finish = (el) => {
         if (done) return;
@@ -147,10 +150,7 @@
       };
 
       const ex = query();
-      if (ex) {
-        finish(ex);
-        return;
-      }
+      if (ex) return finish(ex);
 
       timeoutTimer = setManagedTimeout(fail, timeout);
 
@@ -195,32 +195,27 @@
     return m ? m[1] : '';
   }
 
-  function cellText(td) { return td ? normalizeText(td.textContent) : ''; }
+  function cellText(td) {
+    return td ? normalizeText(td.textContent) : '';
+  }
 
   function getHeaderMap(table) {
     const result = {};
     const headers = table.querySelectorAll('thead th');
     headers.forEach((th, i) => {
       const t = normalizeText(th.textContent).toLowerCase();
-      if (t.includes('id займ'))       result.loanId      = i;
-      if (t.includes('дата прихода'))  result.incomeDate  = i;
-      if (t.includes('сумма прихода')) result.amount      = i;
-      if (t.includes('номер заказа'))  result.orderNumber = i;
+      if (t.includes('id займ')) result.loanId = i;
+      if (t.includes('дата прихода')) result.incomeDate = i;
+      if (t.includes('сумма прихода')) result.amount = i;
+      if (t.includes('номер заказа')) result.orderNumber = i;
     });
     return result;
   }
 
   function buildIncomeListUrl(loanId) {
-    const baseMatch = location.pathname.match(/\/admin\/agis2\/core\/(loan|loan-overdue)\/\d+\/supportprocesstask\/\d+\/task-protocol\/list/i);
-    const currentMatch = location.pathname.match(/\/admin\/agis2\/core\/(loan|loan-overdue)\/\d+\//i);
-
-    const prefix = baseMatch
-      ? `/admin/agis2/core/${baseMatch[1]}/${loanId}/income/list`
-      : currentMatch
-        ? currentMatch[0].replace(/\/$/, '') + 'income/list'
-        : `/admin/agis2/core/loan-overdue/${loanId}/income/list`;
-
-    return prefix;
+    const currentTypeMatch = location.pathname.match(/\/admin\/agis2\/core\/(loan|loan-overdue)\//i);
+    const type = currentTypeMatch ? currentTypeMatch[1] : 'loan-overdue';
+    return `/admin/agis2/core/${type}/${loanId}/income/list`;
   }
 
   async function initListPage(token) {
@@ -239,7 +234,7 @@
     const style = document.createElement('style');
     style.textContent = [
       'tr.bc-protocol-copy-row { cursor: copy; }',
-      'tr.bc-protocol-copy-row:hover td { background: #fff7d6 !important; }',
+      'tr.bc-protocol-copy-row:hover td { background: #fff7d6 !important; }'
     ].join('\n');
     document.head.appendChild(style);
 
@@ -255,14 +250,14 @@
         const cells = tr.children;
         const rawLoanId = colIndex.loanId !== undefined ? cellText(cells[colIndex.loanId]) : '';
         const loanIdFromCell = rawLoanId.replace(/\s/g, '');
-        const loanIdFromUrl  = getLoanIdFromUrl();
-        const loanId         = loanIdFromCell || loanIdFromUrl;
+        const loanIdFromUrl = getLoanIdFromUrl();
+        const loanId = loanIdFromCell || loanIdFromUrl;
 
         const payload = {
           loanId,
           incomeDate: colIndex.incomeDate !== undefined ? cellText(cells[colIndex.incomeDate]) : '',
           amount: colIndex.amount !== undefined ? parseAmount(cellText(cells[colIndex.amount])) : '',
-          orderNumber: colIndex.orderNumber !== undefined ? cellText(cells[colIndex.orderNumber]) : '-',
+          orderNumber: colIndex.orderNumber !== undefined ? cellText(cells[colIndex.orderNumber]) : '-'
         };
 
         if (!payload.orderNumber) payload.orderNumber = '-';
@@ -271,7 +266,7 @@
         await storageSet(STORAGE_KEY, JSON.stringify(payload));
 
         const toast = document.createElement('div');
-        toast.textContent = `Сохранено: займ ${payload.loanId || loanIdFromUrl || '-'}, дата ${payload.incomeDate || '-'}, сумма ${payload.amount || '-'}, заказ ${payload.orderNumber || '-'}`;
+        toast.textContent = `Сохранено: займ ${payload.loanId || '-'}, дата ${payload.incomeDate || '-'}, сумма ${payload.amount || '-'}, заказ ${payload.orderNumber || '-'}`;
         Object.assign(toast.style, {
           position: 'fixed',
           top: '60px',
@@ -302,24 +297,60 @@
     log('Список протокола готов, строк:', rows.length);
   }
 
-  function setVal(sel, val) {
+  function setVal(selectors, val) {
     if (val === undefined || val === null) return false;
-    const el = document.querySelector(sel);
-    if (!el) {
-      log('Поле не найдено:', sel);
-      return false;
+    const list = Array.isArray(selectors) ? selectors : [selectors];
+
+    for (const sel of list) {
+      const el = document.querySelector(sel);
+      if (!el) continue;
+
+      const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
+      if (setter) setter.call(el, val);
+      else el.value = val;
+
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      if (window.jQuery) window.jQuery(el).trigger('change');
+
+      log('Заполнено поле:', sel, '→', val);
+      return true;
     }
 
-    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
-    if (setter) setter.call(el, val);
-    else el.value = val;
+    log('Поле не найдено:', list);
+    return false;
+  }
 
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-    if (window.jQuery) window.jQuery(el).trigger('change');
+  async function waitForIncomeForm() {
+    const selectors = [
+      'input[aria-label="Дата платежа"]',
+      'input[name$="[incomeDate]"]',
+      'input[aria-label="Номер заказа*"]',
+      'input[aria-label="Сумма платежа*"]',
+      'textarea'
+    ];
 
-    log('Заполнено поле:', sel, '→', val);
-    return true;
+    const started = Date.now();
+
+    while (Date.now() - started < 10000) {
+      for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el) return el;
+      }
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    throw new Error('Форма прихода не появилась: не найден ни один ожидаемый input.');
+  }
+
+  function findNodeByText(text) {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, null);
+    let node;
+    while ((node = walker.nextNode())) {
+      const content = normalizeText(node.textContent);
+      if (content && content.includes(text)) return node;
+    }
+    return null;
   }
 
   function addFillButton(handler) {
@@ -330,25 +361,97 @@
     btn.id = `${SCRIPT_NS}-fill-btn`;
     btn.className = 'btn btn-success';
     btn.textContent = 'Вставить сохранённые данные';
-    btn.style.marginBottom = '12px';
+
+    Object.assign(btn.style, {
+      marginLeft: '8px',
+      whiteSpace: 'nowrap'
+    });
 
     btn.addEventListener('click', handler);
 
-    const form = document.querySelector('form');
-    if (form) form.prepend(btn);
+    const allButtons = Array.from(document.querySelectorAll('button, input[type="submit"], a.btn'));
+
+    const previewBtn = allButtons.find(el => {
+      const text = normalizeText(el.textContent || el.value || '');
+      return text === 'Предпросмотр' || text.includes('Предпросмотр');
+    });
+
+    if (previewBtn && previewBtn.parentElement) {
+      const wrapper = document.createElement('span');
+      Object.assign(wrapper.style, {
+        display: 'inline-flex',
+        alignItems: 'center',
+        marginLeft: '8px'
+      });
+      wrapper.appendChild(btn);
+
+      previewBtn.insertAdjacentElement('afterend', wrapper);
+      log('Кнопка вставлена рядом с кнопкой "Предпросмотр".');
+      return;
+    }
+
+    const previewTextNode = findNodeByText('Предпросмотр');
+    if (previewTextNode && previewTextNode.parentElement) {
+      const wrapper = document.createElement('div');
+      Object.assign(wrapper.style, {
+        display: 'inline-block',
+        marginLeft: '8px'
+      });
+      wrapper.appendChild(btn);
+
+      previewTextNode.insertAdjacentElement('afterend', wrapper);
+      log('Кнопка вставлена рядом с текстом "Предпросмотр".');
+      return;
+    }
+
+    const actions = document.querySelector('.sonata-ba-form-actions, .box-footer, form');
+    if (actions) {
+      const wrapper = document.createElement('div');
+      Object.assign(wrapper.style, {
+        marginTop: '12px'
+      });
+      wrapper.appendChild(btn);
+      actions.appendChild(wrapper);
+      log('Кнопка вставлена в actions как fallback.');
+      return;
+    }
+
+    Object.assign(btn.style, {
+      position: 'fixed',
+      top: '100px',
+      right: '20px',
+      zIndex: '99999'
+    });
+    document.body.appendChild(btn);
+    log('Кнопка вставлена как fixed fallback.');
   }
 
   function fillForm(data) {
     const loanIdFromUrl = getLoanIdFromUrl();
 
-    const dateOk = setVal('input[aria-label="Дата платежа"]', data.incomeDate);
-    const orderOk = setVal('input[aria-label="Номер заказа*"]', data.orderNumber || '-');
-    const amountOk = setVal('input[aria-label="Сумма платежа*"]', data.amount);
+    const dateOk = setVal([
+      'input[aria-label="Дата платежа"]',
+      'input[name$="[incomeDate]"]'
+    ], data.incomeDate);
+
+    const orderOk = setVal([
+      'input[aria-label="Номер заказа*"]',
+      'input[name$="[bankPaymentId]"]',
+      'input[name*="[orderNumber]"]'
+    ], data.orderNumber || '-');
+
+    const amountOk = setVal([
+      'input[aria-label="Сумма платежа*"]',
+      'input[name$="[income]"]',
+      'input[name*="[amount]"]'
+    ], data.amount);
 
     const loanOk =
-      setVal('input[name$="[loan]"]', loanIdFromUrl) ||
-      setVal('input[name$="[loanId]"]', loanIdFromUrl) ||
-      setVal('input[type="hidden"][name*="loan"]', loanIdFromUrl);
+      setVal([
+        'input[name$="[loan]"]',
+        'input[name$="[loanId]"]',
+        'input[type="hidden"][name*="loan"]'
+      ], loanIdFromUrl);
 
     const banner = document.createElement('div');
     banner.textContent = [
@@ -356,8 +459,9 @@
       `Дата: ${dateOk ? 'OK' : 'нет'}`,
       `Номер заказа: ${orderOk ? 'OK' : 'нет'}`,
       `Сумма: ${amountOk ? 'OK' : 'нет'}`,
-      `ID займа: ${loanOk ? 'OK' : 'нет (используется займ из URL /Loan #...)'}`
+      `ID займа: ${loanOk ? 'OK' : 'из URL'}`
     ].join(' ');
+
     Object.assign(banner.style, {
       position: 'fixed',
       top: '60px',
@@ -379,7 +483,7 @@
 
   async function initCreatePage(token) {
     try {
-      await waitForElement('input[aria-label="Дата платежа"]', { timeout: 10000 });
+      await waitForIncomeForm();
     } catch (e) {
       warn('Форма не появилась:', e.message);
       return;
@@ -394,8 +498,9 @@
       }
 
       let data;
-      try { data = JSON.parse(raw); }
-      catch (e) {
+      try {
+        data = JSON.parse(raw);
+      } catch (e) {
         warn('Неверный payload:', e);
         alert('Ошибка чтения сохранённых данных.');
         return;
