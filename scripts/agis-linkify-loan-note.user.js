@@ -29,13 +29,13 @@
 
   // @sandbox DOM: GM_getValue возвращает готовое значение (не Promise), но храним await ниже
   // на случай будущего изменения sandbox-режима — так безопаснее.
-  let DEBUG = !!GM_getValue('debug_linkify', false);
+  let DEBUG = !!GM_getValue('agis:linkify:debug', false);
 
   GM_registerMenuCommand(
     `Debug-логи: ${DEBUG ? '✅ вкл' : '⬜ выкл'} — нажмите для переключения`,
     () => {
       DEBUG = !DEBUG;
-      GM_setValue('debug_linkify', DEBUG);
+      GM_setValue('agis:linkify:debug', DEBUG);
       alert(`[${SCRIPT_NS}] Debug-логи ${DEBUG ? 'включены' : 'выключены'}. Обновите страницу.`);
     }
   );
