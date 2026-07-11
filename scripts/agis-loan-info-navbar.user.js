@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      4.7.1
+// @version      5.0
 // @description  Полноширинная строка под навбаром с информацией о займе и цветным статусом
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*
@@ -30,7 +30,10 @@
 (function () {
     'use strict';
 
-    const SCRIPT_NAME  = 'CreditSmileLoanInfo';
+    // Стандарт репо: SCRIPT_NS = agis:<feature> (для лога и storage), DOM_NS — без двоеточия (для CSS/id).
+    const SCRIPT_NS    = 'agis:loan-info';
+    const DOM_NS       = 'agis-loan-info';
+    // BAR_ID остаётся в прежнем виде — не трогаем CSS-селекторы, которые могут быть в коде.
     const BAR_ID       = 'cs-loan-bar';
     // Fallback-цепочка: пробуем селекторы по очереди, возвращаем первый найденный
     const NAVBAR_SELECTORS = [
@@ -40,7 +43,10 @@
         '#content',
     ];
     const CACHE_TTL    = 5 * 60 * 1000;
-    const CACHE_VERSION = 'v44';
+    // v45 — bump вместе со сменой префикса ключа кэша (SCRIPT_NAME → SCRIPT_NS).
+    // Старые ключи `CreditSmileLoanInfo:*:v44` останутся висеть в GM-storage как мёртвый балласт,
+    // но пользователь не почувствует — TTL всего 5 минут, кэш наполнится заново при первом визите.
+    const CACHE_VERSION = 'v45';
     const WAIT_TIMEOUT = 20000;
 
     let routeToken = 0;
@@ -118,7 +124,7 @@
             const value = await GM_getValue(key, fallback);
             return value === undefined ? fallback : value;
         } catch (err) {
-            console.warn(`[${SCRIPT_NAME}] GM_getValue error:`, err);
+            console.warn(`[${SCRIPT_NS}] GM_getValue error:`, err);
             return fallback;
         }
     }
@@ -129,7 +135,7 @@
         const timer = setTimeout(async () => {
             storageTimers.delete(key);
             try { await GM_setValue(key, value); }
-            catch (err) { console.warn(`[${SCRIPT_NAME}] GM_setValue error:`, err); }
+            catch (err) { console.warn(`[${SCRIPT_NS}] GM_setValue error:`, err); }
         }, wait);
         storageTimers.set(key, timer);
     }
@@ -179,7 +185,7 @@
         return waitForElement(NAVBAR_SELECTORS.join(', '))
             .catch((err) => {
                 console.warn(
-                    `[${SCRIPT_NAME}] Навбар не найден за ${WAIT_TIMEOUT} мс (${location.href}).`,
+                    `[${SCRIPT_NS}] Навбар не найден за ${WAIT_TIMEOUT} мс (${location.href}).`,
                     'Пробовались селекторы:', NAVBAR_SELECTORS.join(', ')
                 );
                 throw err;
@@ -209,7 +215,7 @@
     // onUrlChange должен вызываться ровно один раз за время жизни страницы.
     function onUrlChange(callback) {
         if (urlChangeInstalled) {
-            console.warn(`[${SCRIPT_NAME}] onUrlChange уже установлен — повторный вызов игнорируется.`);
+            console.warn(`[${SCRIPT_NS}] onUrlChange уже установлен — повторный вызов игнорируется.`);
             return () => {};
         }
         urlChangeInstalled = true;
@@ -306,10 +312,10 @@
                 host: url.host,
                 section: match[1],
                 id: match[2],
-                cacheKey: `${SCRIPT_NAME}:${url.host}:${match[1]}:${match[2]}:${CACHE_VERSION}`,
+                cacheKey: `${SCRIPT_NS}:${url.host}:${match[1]}:${match[2]}:${CACHE_VERSION}`,
             };
         } catch (err) {
-            console.warn(`[${SCRIPT_NAME}] URL parse error:`, err);
+            console.warn(`[${SCRIPT_NS}] URL parse error:`, err);
             return null;
         }
     }
@@ -578,7 +584,7 @@
                         writeCache(context, backendData);
                         render(context, backendData, navbar);
                     } catch (e) {
-                        console.warn(`[${SCRIPT_NAME}] backend fallback failed:`, e.message);
+                        console.warn(`[${SCRIPT_NS}] backend fallback failed:`, e.message);
                     }
                 }
             }
@@ -593,7 +599,7 @@
 
             stopTableObserver = observeTableChanges(delayedRefresh);
         } catch (err) {
-            console.warn(`[${SCRIPT_NAME}] init error (${reason}):`, err.message);
+            console.warn(`[${SCRIPT_NS}] init error (${reason}):`, err.message);
         }
     }
 
