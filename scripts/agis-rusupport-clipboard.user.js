@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS: вставка RUSUPPORT в содержание заметки
 // @namespace    agis.rusupport.clipboard
-// @version      2.0.0
+// @version      2.0.1
 // @description  Вставляет текст из буфера обмена в поле "Содержание" при создании заметки к займу, только если текст содержит слово RUSUPPORT.
 // @author       vicgor
 // @match        https://agis.volgazaim.ru/admin/*/loan*/*/loannote/create*
@@ -38,12 +38,25 @@
   const AUTO_INSERT_DELAY = 300;
   const WAIT_TIMEOUT      = 20000;
 
-  let DEBUG = !!GM_getValue('debug_rusupport', false);
+  // --- Debug: ключ в namespace, однократная миграция старого плоского ключа ---
+  // Старый ключ 'debug_rusupport' (v1.x / v2.0.0) мигрируется при первом запуске.
+  // После миграции плоский ключ не читается и не пишется.
+  const DEBUG_KEY     = `${SCRIPT_NS}:debug`;
+  const DEBUG_KEY_OLD = 'debug_rusupport';
+  (() => {
+    const legacy = GM_getValue(DEBUG_KEY_OLD, null);
+    if (legacy !== null) {
+      GM_setValue(DEBUG_KEY, !!legacy);
+      GM_setValue(DEBUG_KEY_OLD, null); // очищаем, чтобы не мигрировать повторно
+    }
+  })();
+
+  let DEBUG = !!GM_getValue(DEBUG_KEY, false);
   GM_registerMenuCommand(
     `Debug-логи: ${DEBUG ? '✅ вкл' : '⬜ выкл'} — нажмите для переключения`,
     () => {
       DEBUG = !DEBUG;
-      GM_setValue('debug_rusupport', DEBUG);
+      GM_setValue(DEBUG_KEY, DEBUG);
       alert(`[${SCRIPT_NS}] Debug-логи ${DEBUG ? 'включены' : 'выключены'}. Обновите страницу.`);
     }
   );
@@ -196,8 +209,17 @@
     },
   };
 
+  // Нормализация pathname для ключа: убираем повторные '/' и trailing '/'
+  // чтобы ключ был предсказуемым и компактным.
+  // Пример: '/admin//agis2//loan/123/loannote/create/' → '/admin/agis2/loan/123/loannote/create'
+  // Tampermonkey не документирует ограничение на длину ключа GM_storage,
+  // но pathname типового URL AGIS (~60 символов) × 2 (префикс) ≈ 80 символов — в пределах нормы.
+  function normalizePathKey(pathname) {
+    return pathname.replace(/\/+/g, '/').replace(/\/$/, '') || '/';
+  }
+
   const saveLastInsert = debounce((url, hash) => {
-    storage.set(`agis:rusupport:lastInsert:v1:${url}`, { hash, savedAt: Date.now() });
+    storage.set(`${SCRIPT_NS}:lastInsert:v1:${normalizePathKey(url)}`, { hash, savedAt: Date.now() });
   }, 700);
 
   // --- Целевая страница ---
