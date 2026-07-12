@@ -1,13 +1,43 @@
 // ==UserScript==
 // @name         AGIS - вставка прихода из протокола
 // @namespace    agis.protocol.income.fill
-// @version      1.8.1
+// @version      2.0
 // @description  Клик по строке протокола сохраняет данные; автопереход на список приходов нужного займа; на странице создания прихода кнопка вставки заполняет форму.
+// @match        https://agis.volgazaim.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
+// @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*/income/list*
+// @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*/income/create*
+// @match        https://agis.volgazaim.ru/admin/agis2/core/loan-overdue/*/income/list*
+// @match        https://agis.volgazaim.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.creditsmile.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
+// @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*/income/list*
+// @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*/income/create*
+// @match        https://agis.creditsmile.ru/admin/agis2/core/loan-overdue/*/income/list*
+// @match        https://agis.creditsmile.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.moneymania.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
+// @match        https://agis.moneymania.ru/admin/agis2/core/loan/*/income/list*
+// @match        https://agis.moneymania.ru/admin/agis2/core/loan/*/income/create*
+// @match        https://agis.moneymania.ru/admin/agis2/core/loan-overdue/*/income/list*
+// @match        https://agis.moneymania.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @match        https://agis.berrycash.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
 // @match        https://agis.berrycash.ru/admin/agis2/core/loan/*/income/list*
 // @match        https://agis.berrycash.ru/admin/agis2/core/loan/*/income/create*
 // @match        https://agis.berrycash.ru/admin/agis2/core/loan-overdue/*/income/list*
 // @match        https://agis.berrycash.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.belkacredit.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
+// @match        https://agis.belkacredit.ru/admin/agis2/core/loan/*/income/list*
+// @match        https://agis.belkacredit.ru/admin/agis2/core/loan/*/income/create*
+// @match        https://agis.belkacredit.ru/admin/agis2/core/loan-overdue/*/income/list*
+// @match        https://agis.belkacredit.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.credit7.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
+// @match        https://agis.credit7.ru/admin/agis2/core/loan/*/income/list*
+// @match        https://agis.credit7.ru/admin/agis2/core/loan/*/income/create*
+// @match        https://agis.credit7.ru/admin/agis2/core/loan-overdue/*/income/list*
+// @match        https://agis.credit7.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.credit365.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
+// @match        https://agis.credit365.ru/admin/agis2/core/loan/*/income/list*
+// @match        https://agis.credit365.ru/admin/agis2/core/loan/*/income/create*
+// @match        https://agis.credit365.ru/admin/agis2/core/loan-overdue/*/income/list*
+// @match        https://agis.credit365.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-protocol-income-fill.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-protocol-income-fill.user.js
 // @run-at       document-start
@@ -21,10 +51,13 @@
 (() => {
   'use strict';
 
-  const SCRIPT_NS = 'agis-protocol-income-fill';
-  const STORAGE_KEY = 'agis_protocol_income_payload';
-  const DEBUG_KEY = 'debug_protocol_income_fill';
+  const SCRIPT_NS = 'agis:protocol-income';
+  // ID для DOM-элементов и CSS-классов (не содержит двоеточия, чтобы не ломать CSS-селекторы).
+  const DOM_NS = 'agis-protocol-income';
+  const STORAGE_KEY = 'agis:protocol-income:payload:v1';
+  const DEBUG_KEY = 'agis:protocol-income:debug';
   const WAIT_TIMEOUT = 15000;
+  const FORM_WAIT_TIMEOUT = 10000;
 
   let DEBUG = false;
 
@@ -146,6 +179,25 @@
 
   async function initDebugFlag() {
     DEBUG = !!(await storageGet(DEBUG_KEY, false));
+
+    // Миграция storage-ключей с v1.x (плоские имена) на v2.x (namespace + версия).
+    // Разовая операция: если новый ключ пуст, а старый есть — переносим и чистим старый.
+    try {
+      const legacyDebug = await storageGet('debug_protocol_income_fill', undefined);
+      if (legacyDebug !== undefined && !(await storageGet(DEBUG_KEY, undefined))) {
+        await storageSet(DEBUG_KEY, !!legacyDebug);
+        DEBUG = !!legacyDebug;
+        await storageDelete('debug_protocol_income_fill');
+      }
+
+      const legacyPayload = await storageGet('agis_protocol_income_payload', undefined);
+      if (legacyPayload !== undefined && !(await storageGet(STORAGE_KEY, undefined))) {
+        await storageSet(STORAGE_KEY, legacyPayload);
+        await storageDelete('agis_protocol_income_payload');
+      }
+    } catch (error) {
+      warn('Миграция storage не удалась:', error);
+    }
   }
 
   function registerMenu() {
@@ -308,9 +360,9 @@
     const colIndex = getHeaderMap(table);
     log('Колонки:', colIndex);
 
-    if (!document.querySelector(`#${SCRIPT_NS}-list-style`)) {
+    if (!document.querySelector(`#${DOM_NS}-list-style`)) {
       const style = document.createElement('style');
-      style.id = `${SCRIPT_NS}-list-style`;
+      style.id = `${DOM_NS}-list-style`;
       style.textContent = [
         'tr.bc-protocol-copy-row { cursor: copy; }',
         'tr.bc-protocol-copy-row:hover td { background: #fff7d6 !important; }'
@@ -403,7 +455,7 @@
       'textarea'
     ].join(', ');
 
-    return waitForElement(selector, { timeout: 10000 });
+    return waitForElement(selector, { timeout: FORM_WAIT_TIMEOUT });
   }
 
   function findNodeByText(text) {
@@ -419,7 +471,7 @@
   }
 
   function removeFillButton() {
-    const btn = document.querySelector(`#${SCRIPT_NS}-fill-btn`);
+    const btn = document.querySelector(`#${DOM_NS}-fill-btn`);
     if (btn) {
       const container = btn.parentElement;
       btn.remove();
@@ -436,11 +488,11 @@
   }
 
   function addFillButton(handler) {
-    if (document.querySelector(`#${SCRIPT_NS}-fill-btn`)) return;
+    if (document.querySelector(`#${DOM_NS}-fill-btn`)) return;
 
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.id = `${SCRIPT_NS}-fill-btn`;
+    btn.id = `${DOM_NS}-fill-btn`;
     btn.className = 'btn btn-success';
     btn.textContent = 'Вставить сохранённые данные';
 
