@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - дублировать приход
 // @namespace    agis.duplicate.income
-// @version      2.5
+// @version      3.0
 // @description  Клик по строке прихода → открыть форму создания и автозаполнить (дата, шлюз, внешний ID, сумма). Ручное подтверждение.
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan*/*/income/*
@@ -14,24 +14,27 @@
 // @sandbox      DOM
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_deleteValue
 // @grant        GM_registerMenuCommand
 // ==/UserScript==
 
 (() => {
   'use strict';
 
-  const SCRIPT_NS    = 'agis-dup-income';
-  const STORAGE_KEY  = 'agis_dup_income_payload';
+  const SCRIPT_NS    = 'agis:duplicate-income';
+  const DOM_NS       = 'agis-duplicate-income'; // без двоеточия — для CSS/id, если понадобятся
+  const STORAGE_KEY  = 'agis:duplicate-income:payload:v1';
+  const DEBUG_KEY    = 'agis:duplicate-income:debug';
   const WAIT_TIMEOUT = 15000;
 
   // В @sandbox DOM GM_getValue/setValue синхронные — .then() недоступен
-  let DEBUG = !!GM_getValue('debug_dup', false);
+  let DEBUG = !!GM_getValue(DEBUG_KEY, false);
 
   GM_registerMenuCommand(
     `Debug-логи: ${DEBUG ? '✅ вкл' : '⬜ выкл'} — нажмите для переключения`,
     () => {
       DEBUG = !DEBUG;
-      GM_setValue('debug_dup', DEBUG);
+      GM_setValue(DEBUG_KEY, DEBUG);
       alert(`[${SCRIPT_NS}] Debug-логи ${DEBUG ? 'включены' : 'выключены'}. Обновите страницу.`);
     }
   );
@@ -113,6 +116,33 @@
   async function storageSet(key, value) {
     try { await GM_setValue(key, value); }
     catch (e) { warn('GM_setValue ошибка:', key, e); }
+  }
+
+  async function storageDelete(key) {
+    try { await GM_deleteValue(key); }
+    catch (e) { warn('GM_deleteValue ошибка:', key, e); }
+  }
+
+  // Разовая миграция storage-ключей v2.5 → v3.0 (плоские имена → namespace + версия).
+  // Если новый ключ пуст, а старый есть — переносим и удаляем старый.
+  async function migrateLegacyStorage() {
+    try {
+      // payload: agis_dup_income_payload → agis:duplicate-income:payload:v1
+      const legacyPayload = await storageGet('agis_dup_income_payload', undefined);
+      if (legacyPayload !== undefined && !(await storageGet(STORAGE_KEY, undefined))) {
+        await GM_setValue(STORAGE_KEY, legacyPayload);
+        await storageDelete('agis_dup_income_payload');
+        log('Миграция storage: payload перенесён');
+      }
+      // debug: debug_dup → agis:duplicate-income:debug
+      const legacyDebug = await storageGet('debug_dup', undefined);
+      if (legacyDebug !== undefined) {
+        await GM_setValue(DEBUG_KEY, !!legacyDebug);
+        await storageDelete('debug_dup');
+        DEBUG = !!legacyDebug; // обновить в текущей сессии
+        log('Миграция storage: debug флаг перенесён');
+      }
+    } catch (e) { warn('Миграция storage не удалась:', e); }
   }
 
   function waitForElement(selector, { root = document, timeout = WAIT_TIMEOUT } = {}) {
@@ -339,5 +369,9 @@
     stopUrlWatcher();
   }, { once: true });
 
+  // Миграция storage — параллельно bootstrap. Страница создания у пользователя с момента
+  // клика до чтения payload в initCreatePage проходит минимум 100мс на редирект —
+  // миграция успевает завершиться. При гонке — откат через следующий запуск.
+  migrateLegacyStorage();
   bootstrap();
 })();
