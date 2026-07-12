@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS автозаполнение из Google Sheets
 // @namespace    agis.income.googlesheet
-// @version      4.1
+// @version      4.2
 // @description  Автозаполнение формы AGIS из Google Таблицы (CSV Publish). Запрос через GM_xmlhttpRequest (обходит CSP).
 // @match        https://agis.creditsmile.ru/*/loan*/*/income/create
 // @match        https://agis.belkacredit.ru/*/loan*/*/income/create
@@ -14,6 +14,7 @@
 // @sandbox      DOM
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_deleteValue
 // @grant        GM_xmlhttpRequest
 // @grant        GM_registerMenuCommand
 // @connect      docs.google.com
@@ -23,11 +24,20 @@
 (() => {
   'use strict';
 
-  const SCRIPT_NS   = 'agis-googlesheet';
-  const STORAGE_KEY = 'agis_google_sheet_url';
+  const SCRIPT_NS   = 'agis:googlesheet';
+  // ID для DOM-элементов (без двоеточия — чтобы не ломать CSS-селекторы, если понадобятся).
+  const DOM_NS     = 'agis-googlesheet';
+  const STORAGE_KEY = 'agis:googlesheet:sheet-url:v1';
+  const DEBUG_KEY   = 'agis:googlesheet:debug';
   const WAIT_TIMEOUT = 15000;
+  const FILL_TIMEOUT = 10000;
+  const BANNER_DURATION_MS = 6000;
 
-  const log  = (...a) => console.log(`[${SCRIPT_NS}]`, ...a);
+  // DEBUG вычитывается синхронно в старте (GM_getValue в sandbox=DOM возвращает значение, не Promise).
+  // Миграция старых ключей в initStorage() — асинхронная, после бутстрапа.
+  let DEBUG = !!GM_getValue(DEBUG_KEY, false);
+
+  const log  = (...a) => { if (DEBUG) console.log(`[${SCRIPT_NS}]`, ...a); };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
 
   // --- Трекинг observers и таймеров ---
@@ -42,6 +52,15 @@
   function setManagedTimeout(cb, delay) {
     const t = setTimeout(() => { timers.delete(t); cb(); }, delay);
     timers.add(t);
+    return t;
+  }
+
+  // Отдельный setTimeout вне timers Set (для баннеров и UI таймеров, чтобы
+  // cleanupRoute() не убивал их при каждом SPA-переходе).
+  const uiTimers = new Set();
+  function setUiTimeout(cb, delay) {
+    const t = setTimeout(() => { uiTimers.delete(t); cb(); }, delay);
+    uiTimers.add(t);
     return t;
   }
 
@@ -63,6 +82,8 @@
     cleanupRoute();
     for (const t of storageTimers.values()) clearTimeout(t);
     storageTimers.clear();
+    for (const t of uiTimers) clearTimeout(t);
+    uiTimers.clear();
   }
 
   // --- Хранилище (async, как предписывает ядро) ---
@@ -71,6 +92,11 @@
       const v = await GM_getValue(key, fallback);
       return v === undefined ? fallback : v;
     } catch (e) { warn('GM_getValue ошибка:', key, e); return fallback; }
+  }
+
+  async function storageDelete(key) {
+    try { await GM_deleteValue(key); }
+    catch (e) { warn('GM_deleteValue ошибка:', key, e); }
   }
 
   function storageSetDebounced(key, value, wait = 300) {
@@ -82,6 +108,19 @@
       catch (e) { warn('GM_setValue ошибка:', key, e); }
     }, wait);
     storageTimers.set(key, t);
+  }
+
+  // Разовая миграция storage-ключей с v4.1 (плоские имена) на v4.2 (namespace + версия).
+  // Если новый ключ пуст, а старый есть — переносим и удаляем старый.
+  async function migrateLegacyStorage() {
+    try {
+      const legacyUrl = await storageGet('agis_google_sheet_url', undefined);
+      if (legacyUrl !== undefined && !(await storageGet(STORAGE_KEY, undefined))) {
+        await GM_setValue(STORAGE_KEY, legacyUrl);
+        await storageDelete('agis_google_sheet_url');
+        log('Миграция storage: sheet-url перенесён');
+      }
+    } catch (e) { warn('Миграция storage не удалась:', e); }
   }
 
   // --- DOM-ожидание через MutationObserver (не setInterval) ---
@@ -212,7 +251,7 @@
   async function waitForAndFill(selector, value) {
     if (!value) return;
     try {
-      const input = await waitForElement(selector, { timeout: 10000 });
+      const input = await waitForElement(selector, { timeout: FILL_TIMEOUT });
       if (input.tagName.toLowerCase() === 'select') {
         const option = Array.from(input.options).find(o => o.text.trim() === value.trim());
         if (option) {
@@ -249,10 +288,10 @@
       boxShadow: '0 2px 8px rgba(0,0,0,.2)', fontSize: '14px', maxWidth: '360px',
     });
     document.body.appendChild(div);
-    setTimeout(() => div.remove(), 6000);
+    setUiTimeout(() => div.remove(), BANNER_DURATION_MS);
   }
 
-  // --- Меню Tampermonkey для изменения URL без правки кода ---
+  // --- Меню Tampermonkey ---
   GM_registerMenuCommand('Изменить URL Google Таблицы', async () => {
     const current = await storageGet(STORAGE_KEY, '');
     const newUrl = prompt('Введите новый URL Google Таблицы (CSV):', current);
@@ -261,6 +300,15 @@
       alert('URL сохранён. Обновите страницу.');
     }
   });
+
+  GM_registerMenuCommand(
+    `Debug-логи: ${DEBUG ? '✅ вкл' : '⬜ выкл'} — нажмите для переключения`,
+    () => {
+      DEBUG = !DEBUG;
+      GM_setValue(DEBUG_KEY, DEBUG);
+      alert(`[${SCRIPT_NS}] Debug-логи ${DEBUG ? 'включены' : 'выключены'}. Обновите страницу.`);
+    }
+  );
 
   // onUrlChange должен вызываться ровно один раз за время жизни страницы.
   // Повторный вызов вернёт no-op stopFn и выдаст предупреждение.
@@ -374,5 +422,9 @@
     stopUrlWatcher();
   }, { once: true });
 
+  // Миграция storage-ключей выполняется параллельно bootstrap;
+  // в bootstrap() второй storageGet через debounce (300мс) заберёт свежемигрированное значение,
+  // либо при следующей перезагрузке — если пользователь введёт URL повторно, гонки нет.
+  migrateLegacyStorage();
   bootstrap();
 })();
