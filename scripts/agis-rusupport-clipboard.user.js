@@ -58,7 +58,11 @@
   const DEBUG_KEY_OLD = 'debug_rusupport';
 
   // registerDebugToggle асинхронный — debugCtl.value равен false до его резолва.
-  // onUrlChange/bootstrap стартуют не дожидаясь этого, чтобы не задерживать SPA-watcher.
+  // bootstrap('document-start') стартует не дожидаясь этого (см. низ файла), чтобы
+  // не откладывать первый поиск textarea на await GM_getValue/migrateLegacyDebugKey.
+  // Цена: если debug уже был включён в хранилище, первые строки лога этого запуска
+  // (в т.ч. само "Инициализация: document-start") могут не напечататься — догонит
+  // только следующий вызов log() после резолва промиса.
   let debugCtl = { value: false };
   const log  = (...a) => { if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a); };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
@@ -96,10 +100,15 @@
   // Нормализация pathname для ключа: убираем повторные '/' и trailing '/'
   // чтобы ключ был предсказуемым и компактным.
   // Пример: '/admin//agis2//loan/123/loannote/create/' → '/admin/agis2/loan/123/loannote/create'
+  // Tampermonkey не документирует ограничение на длину ключа GM_storage,
+  // но pathname типового URL AGIS (~60 символов) × 2 (префикс) ≈ 80 символов — в пределах нормы.
   function normalizePathKey(pathname) {
     return pathname.replace(/\/+/g, '/').replace(/\/$/, '') || '/';
   }
 
+  // storageSetDebounced дебаунсит по ключу (не всю функцию, как раньше) — быстрые
+  // вызовы с разными url больше не затирают друг друга: каждый путь получает
+  // свой отложенный таймер записи вместо одного общего на функцию.
   function saveLastInsert(url, hash) {
     storageSetDebounced(`${SCRIPT_NS}:lastInsert:v1:${normalizePathKey(url)}`, { hash, savedAt: Date.now() }, 700);
   }
@@ -255,12 +264,14 @@
     installPasteGuard(textarea, setStatus);
 
     // Автопопытка может не сработать из-за требований браузера к user gesture.
-    // Плейн setTimeout: если маршрут сменится раньше, token-проверка внутри
-    // безопасно превращает срабатывание в no-op — отдельный "managed timer" не нужен.
-    setTimeout(() => {
+    // token-проверка внутри достаточна для корректности при SPA-переходе, но таймер
+    // всё равно явно отменяется через addCleanup — чтобы не оставлять висящий колбэк
+    // при быстрой навигации/pagehide до его срабатывания.
+    const autoInsertTimer = setTimeout(() => {
       if (!routeTokenController.isCurrent(token)) return;
       tryAutoInsert(textarea, setStatus, token);
     }, AUTO_INSERT_DELAY);
+    addCleanup(() => clearTimeout(autoInsertTimer));
 
     log('Поле "Содержание" найдено, обработчики установлены.');
   }
@@ -293,6 +304,8 @@
   // --- Запуск ---
   const stopUrlWatcher = onUrlChange(() => bootstrap('url-change'));
 
+  // Двойной вызов cleanupRoute()/runExtraCleanup() (последний bootstrap() уже мог
+  // их вызвать) безопасен — оба идемпотентны: Sets/массив просто оказываются пустыми.
   window.addEventListener('pagehide', () => {
     cleanupRoute();
     runExtraCleanup();
