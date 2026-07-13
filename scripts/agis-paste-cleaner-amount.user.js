@@ -26,6 +26,11 @@
     // отдельным PR после того, как этот пилот подтверждён вручную (Chrome/
     // Firefox/Edge, hard reload, SPA-переход).
 
+    if (!window.__AGIS_CORE__) {
+        console.error('[agis:paste-cleaner] agis-core.js не загружен (@require не сработал)');
+        return;
+    }
+
     const {
         waitForElement,
         observeAddedElements,
