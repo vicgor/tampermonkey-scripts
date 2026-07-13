@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS: вставка RUSUPPORT в содержание заметки
 // @namespace    agis.rusupport.clipboard
-// @version      2.0.1
+// @version      2.1.0
 // @description  Вставляет текст из буфера обмена в поле "Содержание" при создании заметки к займу, только если текст содержит слово RUSUPPORT.
 // @author       vicgor
 // @match        https://agis.volgazaim.ru/admin/*/loan*/*/loannote/create*
@@ -11,6 +11,7 @@
 // @match        https://agis.belkacredit.ru/admin/*/loan*/*/loannote/create*
 // @match        https://agis.credit7.ru/admin/*/loan*/*/loannote/create*
 // @match        https://agis.credit365.ru/admin/*/loan*/*/loannote/create*
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.0.0/lib/agis-core.js#sha256=VD6capqdxkgjVYVTXPdNDDIQtmrPhrnu4CN18A4CO1A=
 // @run-at       document-start
 // @sandbox      DOM
 // @noframes
@@ -21,6 +22,21 @@
 
 (() => {
   'use strict';
+
+  if (!window.__AGIS_CORE__) {
+    console.error('[agis:rusupport] agis-core.js не загружен (@require не сработал)');
+    return;
+  }
+
+  const {
+    waitForElement,
+    observeAddedElements,
+    cleanupRoute,
+    onUrlChange,
+    createRouteTokenController,
+    registerDebugToggle,
+    storageSetDebounced,
+  } = window.__AGIS_CORE__;
 
   // --- Настройки ---
   const SCRIPT_NS = 'agis:rusupport';
@@ -38,176 +54,48 @@
   const AUTO_INSERT_DELAY = 300;
   const WAIT_TIMEOUT      = 20000;
 
-  // --- Debug: ключ в namespace, однократная миграция старого плоского ключа ---
-  // Старый ключ 'debug_rusupport' (v1.x / v2.0.0) мигрируется при первом запуске.
-  // После миграции плоский ключ не читается и не пишется.
   const DEBUG_KEY     = `${SCRIPT_NS}:debug`;
   const DEBUG_KEY_OLD = 'debug_rusupport';
-  (() => {
-    const legacy = GM_getValue(DEBUG_KEY_OLD, null);
-    if (legacy !== null) {
-      GM_setValue(DEBUG_KEY, !!legacy);
-      GM_setValue(DEBUG_KEY_OLD, null); // очищаем, чтобы не мигрировать повторно
-    }
-  })();
 
-  let DEBUG = !!GM_getValue(DEBUG_KEY, false);
-  GM_registerMenuCommand(
-    `Debug-логи: ${DEBUG ? '✅ вкл' : '⬜ выкл'} — нажмите для переключения`,
-    () => {
-      DEBUG = !DEBUG;
-      GM_setValue(DEBUG_KEY, DEBUG);
-      alert(`[${SCRIPT_NS}] Debug-логи ${DEBUG ? 'включены' : 'выключены'}. Обновите страницу.`);
-    }
-  );
-
-  const log  = (...a) => { if (DEBUG) console.log(`[${SCRIPT_NS}]`, ...a); };
+  // registerDebugToggle асинхронный — debugCtl.value равен false до его резолва.
+  // bootstrap('document-start') стартует не дожидаясь этого (см. низ файла), чтобы
+  // не откладывать первый поиск textarea на await GM_getValue/migrateLegacyDebugKey.
+  // Цена: если debug уже был включён в хранилище, первые строки лога этого запуска
+  // (в т.ч. само "Инициализация: document-start") могут не напечататься — догонит
+  // только следующий вызов log() после резолва промиса.
+  let debugCtl = { value: false };
+  const log  = (...a) => { if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a); };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
 
-  // --- Трекинг ресурсов ---
-  const observers    = new Set();
-  const timers       = new Set();
-  const cleanupFns   = [];
+  // Разовая миграция плоского ключа 'debug_rusupport' (v1.x / v2.0.0) в namespace.
+  // После миграции плоский ключ не читается и не пишется.
+  async function migrateLegacyDebugKey() {
+    try {
+      const legacy = await GM_getValue(DEBUG_KEY_OLD, null);
+      if (legacy !== null) {
+        await GM_setValue(DEBUG_KEY, !!legacy);
+        await GM_setValue(DEBUG_KEY_OLD, null);
+      }
+    } catch (err) {
+      warn('Миграция debug-ключа не удалась:', err);
+    }
+  }
 
-  // routeToken инкрементируется при каждом SPA-переходе.
-  let routeToken = 0;
-  let lastUrl    = location.href;
-  let urlChangeInstalled = false;
+  const routeTokenController = createRouteTokenController();
 
   // WeakSet вместо singleton — переживает cleanupRoute, GC собирает при удалении textarea.
   const initializedTextareas = new WeakSet();
 
-  // --- Утилиты ---
-  function setManagedTimeout(fn, delay) {
-    const t = setTimeout(() => { timers.delete(t); fn(); }, delay);
-    timers.add(t);
-    return t;
-  }
-
-  function debounce(fn, wait = 250) {
-    let timer = null;
-    function debounced(...args) {
-      clearTimeout(timer);
-      timer = setTimeout(() => fn.apply(this, args), wait);
-    }
-    debounced.cancel = () => { clearTimeout(timer); timer = null; };
-    return debounced;
-  }
-
+  // Доп. cleanup, который ядро не отслеживает: снятие UI-кнопки, paste-guard'а
+  // и extra-observer'а. В отличие от observers/timers ядра, это реально дренируется
+  // на каждом SPA-переходе (cleanupRoute() ядра чистит только своё).
+  const cleanupFns = [];
   function addCleanup(fn) { cleanupFns.push(fn); return fn; }
-
-  function cleanupRoute() {
-    for (const o of observers) o.disconnect();
-    observers.clear();
-    for (const t of timers) clearTimeout(t);
-    timers.clear();
+  function runExtraCleanup() {
     for (const fn of cleanupFns.splice(0)) {
       try { fn(); } catch (err) { warn('Ошибка cleanup:', err); }
     }
   }
-
-  // --- DOM-ожидание (единая сигнатура с linkify: opts-объект) ---
-  function waitForElement(selector, { root = document, timeout = WAIT_TIMEOUT } = {}) {
-    return new Promise((resolve, reject) => {
-      let done = false;
-      let observer = null;
-      let timeoutTimer = null;
-
-      const query = () => { try { return root.querySelector(selector); } catch (_) { return null; } };
-
-      const finish = (el) => {
-        if (done) return; done = true;
-        if (observer) { observer.disconnect(); observers.delete(observer); }
-        if (timeoutTimer !== null) { clearTimeout(timeoutTimer); timers.delete(timeoutTimer); }
-        resolve(el);
-      };
-      const fail = () => {
-        if (done) return; done = true;
-        if (observer) { observer.disconnect(); observers.delete(observer); }
-        reject(new Error(`waitForElement: "${selector}" not found in ${timeout}ms`));
-      };
-
-      const existing = query();
-      if (existing) { finish(existing); return; }
-
-      timeoutTimer = setManagedTimeout(fail, timeout);
-
-      const startObserve = () => {
-        if (done) return;
-        const observeRoot = root === document
-          ? (document.documentElement || document.body)
-          : root;
-        if (!observeRoot) { setManagedTimeout(startObserve, 50); return; }
-        observer = new MutationObserver(() => { const el = query(); if (el) finish(el); });
-        observer.observe(observeRoot, { childList: true, subtree: true });
-        observers.add(observer);
-        const el = query(); if (el) finish(el);
-      };
-      startObserve();
-    });
-  }
-
-  function observeAddedElements(selector, callback, { root = null } = {}) {
-    const observeRoot = root || document.documentElement || document.body;
-    if (!observeRoot) return () => {};
-
-    const process = (node) => {
-      if (!(node instanceof Element)) return;
-      if (node.matches?.(selector)) callback(node);
-      for (const el of (node.querySelectorAll?.(selector) || [])) callback(el);
-    };
-    process(observeRoot);
-
-    const observer = new MutationObserver((muts) => {
-      for (const m of muts) for (const n of m.addedNodes) process(n);
-    });
-    observer.observe(observeRoot, { childList: true, subtree: true });
-    return () => { observer.disconnect(); };
-  }
-
-  function onUrlChange(callback) {
-    if (urlChangeInstalled) {
-      warn('onUrlChange уже установлен — повторный вызов игнорируется.');
-      return () => {};
-    }
-    urlChangeInstalled = true;
-
-    const check = debounce(() => {
-      if (location.href === lastUrl) return;
-      lastUrl = location.href;
-      callback(location.href);
-    }, 100);
-
-    const origPush    = history.pushState;
-    const origReplace = history.replaceState;
-    history.pushState    = function (...a) { const r = origPush.apply(this, a);    check(); return r; };
-    history.replaceState = function (...a) { const r = origReplace.apply(this, a); check(); return r; };
-    window.addEventListener('popstate',   check);
-    window.addEventListener('hashchange', check);
-    const interval = setInterval(check, 1000); // fallback для SPA без History-API событий
-
-    return () => {
-      history.pushState    = origPush;
-      history.replaceState = origReplace;
-      window.removeEventListener('popstate',   check);
-      window.removeEventListener('hashchange', check);
-      clearInterval(interval);
-      check.cancel();
-      urlChangeInstalled = false;
-    };
-  }
-
-  // --- Storage ---
-  const storage = {
-    get(key, fallback = null) {
-      try { return GM_getValue(key, fallback); }
-      catch (err) { warn('GM_getValue недоступен:', err); return fallback; }
-    },
-    set(key, value) {
-      try { GM_setValue(key, value); }
-      catch (err) { warn('GM_setValue недоступен:', err); }
-    },
-  };
 
   // Нормализация pathname для ключа: убираем повторные '/' и trailing '/'
   // чтобы ключ был предсказуемым и компактным.
@@ -218,9 +106,12 @@
     return pathname.replace(/\/+/g, '/').replace(/\/$/, '') || '/';
   }
 
-  const saveLastInsert = debounce((url, hash) => {
-    storage.set(`${SCRIPT_NS}:lastInsert:v1:${normalizePathKey(url)}`, { hash, savedAt: Date.now() });
-  }, 700);
+  // storageSetDebounced дебаунсит по ключу (не всю функцию, как раньше) — быстрые
+  // вызовы с разными url больше не затирают друг друга: каждый путь получает
+  // свой отложенный таймер записи вместо одного общего на функцию.
+  function saveLastInsert(url, hash) {
+    storageSetDebounced(`${SCRIPT_NS}:lastInsert:v1:${normalizePathKey(url)}`, { hash, savedAt: Date.now() }, 700);
+  }
 
   // --- Целевая страница ---
   function isTargetPage() {
@@ -351,11 +242,11 @@
   async function tryAutoInsert(textarea, setStatus, token) {
     try {
       const text = await readClipboardText();
-      if (token !== routeToken) return;
+      if (!routeTokenController.isCurrent(token)) return;
       const result = appendText(textarea, text);
       setStatus(result.message, result.inserted ? 'success' : 'info');
     } catch (err) {
-      if (token !== routeToken) return;
+      if (!routeTokenController.isCurrent(token)) return;
       setStatus(
         'Авточтение буфера заблокировано браузером. Нажмите кнопку ручной вставки.',
         'info',
@@ -366,25 +257,30 @@
 
   function initContentField(textarea, token) {
     if (!textarea || initializedTextareas.has(textarea)) return;
-    if (token !== routeToken) return;
+    if (!routeTokenController.isCurrent(token)) return;
     initializedTextareas.add(textarea);
 
     const { setStatus } = createUi(textarea);
     installPasteGuard(textarea, setStatus);
 
     // Автопопытка может не сработать из-за требований браузера к user gesture.
-    setManagedTimeout(() => {
-      if (token !== routeToken) return;
+    // token-проверка внутри достаточна для корректности при SPA-переходе, но таймер
+    // всё равно явно отменяется через addCleanup — чтобы не оставлять висящий колбэк
+    // при быстрой навигации/pagehide до его срабатывания.
+    const autoInsertTimer = setTimeout(() => {
+      if (!routeTokenController.isCurrent(token)) return;
       tryAutoInsert(textarea, setStatus, token);
     }, AUTO_INSERT_DELAY);
+    addCleanup(() => clearTimeout(autoInsertTimer));
 
     log('Поле "Содержание" найдено, обработчики установлены.');
   }
 
   // --- Точка входа ---
   async function bootstrap(reason = 'start') {
-    const token = ++routeToken;
+    const token = routeTokenController.next();
     cleanupRoute();
+    runExtraCleanup();
     log('Инициализация:', reason);
 
     if (!isTargetPage()) {
@@ -394,7 +290,7 @@
 
     try {
       const textarea = await waitForElement(CONTENT_SELECTOR, { timeout: WAIT_TIMEOUT });
-      if (token !== routeToken) return;
+      if (!routeTokenController.isCurrent(token)) return;
 
       initContentField(textarea, token);
 
@@ -408,10 +304,18 @@
   // --- Запуск ---
   const stopUrlWatcher = onUrlChange(() => bootstrap('url-change'));
 
+  // Двойной вызов cleanupRoute()/runExtraCleanup() (последний bootstrap() уже мог
+  // их вызвать) безопасен — оба идемпотентны: Sets/массив просто оказываются пустыми.
   window.addEventListener('pagehide', () => {
     cleanupRoute();
+    runExtraCleanup();
     stopUrlWatcher();
   }, { once: true });
+
+  (async () => {
+    await migrateLegacyDebugKey();
+    debugCtl = await registerDebugToggle(SCRIPT_NS, DEBUG_KEY);
+  })();
 
   bootstrap('document-start');
 })();
