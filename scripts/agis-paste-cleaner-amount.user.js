@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - очистка вставки в поля суммы
 // @namespace    agis.paste.cleaner
-// @version      1.8
+// @version      1.9
 // @description  Очищает вставку в полях суммы: оставляет только цифры, точки и запятые; первый и последний символ — цифры.
 // @match        https://agis.credit7.ru/*/loan*/*/create
 // @match        https://agis.creditsmile.ru/*/loan*/*/create
@@ -12,7 +12,7 @@
 // @match        https://agis.moneymania.ru/*/loan*/*/create
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-paste-cleaner-amount.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-paste-cleaner-amount.user.js
-// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/lib/agis-core.js
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.0.0/lib/agis-core.js#sha256=VD6capqdxkgjVYVTXPdNDDIQtmrPhrnu4CN18A4CO1A=
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        none
@@ -21,10 +21,10 @@
 (function () {
     'use strict';
 
-    // ПИЛОТ Волны 2 (ROADMAP.md): @require указывает на main без SRI-хеша —
-    // временно, для ручной проверки в браузере. Тег v1.0.0 + пиннинг хеша —
-    // отдельным PR после того, как этот пилот подтверждён вручную (Chrome/
-    // Firefox/Edge, hard reload, SPA-переход).
+    // Пилот Волны 2 (ROADMAP.md) подтверждён вручную в браузере (PR #13) —
+    // @require теперь закреплён на неизменяемый тег v1.0.0 + SRI-хеш вместо
+    // мутабельного main. Смена хеша/содержимого lib/agis-core.js внутри
+    // тега v1.0.0 невозможна — новые версии ядра идут новым тегом.
 
     if (!window.__AGIS_CORE__) {
         console.error('[agis:paste-cleaner] agis-core.js не загружен (@require не сработал)');
