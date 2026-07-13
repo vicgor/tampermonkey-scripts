@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - очистка вставки в поля суммы
 // @namespace    agis.paste.cleaner
-// @version      1.7
+// @version      1.8
 // @description  Очищает вставку в полях суммы: оставляет только цифры, точки и запятые; первый и последний символ — цифры.
 // @match        https://agis.credit7.ru/*/loan*/*/create
 // @match        https://agis.creditsmile.ru/*/loan*/*/create
@@ -12,6 +12,7 @@
 // @match        https://agis.moneymania.ru/*/loan*/*/create
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-paste-cleaner-amount.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-paste-cleaner-amount.user.js
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/lib/agis-core.js
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        none
@@ -19,6 +20,25 @@
 
 (function () {
     'use strict';
+
+    // ПИЛОТ Волны 2 (ROADMAP.md): @require указывает на main без SRI-хеша —
+    // временно, для ручной проверки в браузере. Тег v1.0.0 + пиннинг хеша —
+    // отдельным PR после того, как этот пилот подтверждён вручную (Chrome/
+    // Firefox/Edge, hard reload, SPA-переход).
+
+    if (!window.__AGIS_CORE__) {
+        console.error('[agis:paste-cleaner] agis-core.js не загружен (@require не сработал)');
+        return;
+    }
+
+    const {
+        waitForElement,
+        observeAddedElements,
+        debounce,
+        onUrlChange,
+        cleanupRoute,
+        cleanup,
+    } = window.__AGIS_CORE__;
 
     const SCRIPT_NS = 'agis:paste-cleaner';
 
@@ -29,150 +49,10 @@
     ].join(', ');
 
     const boundInputs = new WeakSet();
-    const cleanupTasks = new Set();
-
-    let domObserverStop      = null;
-    let urlChangeInstalled   = false;
+    let domObserverStop = null;
 
     function warn(...args) {
         console.warn(`[${SCRIPT_NS}]`, ...args);
-    }
-
-    function addCleanup(fn) {
-        cleanupTasks.add(fn);
-        return () => cleanupTasks.delete(fn);
-    }
-
-    function cleanup() {
-        for (const fn of Array.from(cleanupTasks)) {
-            try {
-                fn();
-            } catch (err) {
-                warn('Ошибка cleanup:', err);
-            }
-        }
-        cleanupTasks.clear();
-        domObserverStop = null;
-    }
-
-    function debounce(fn, wait = 150) {
-        let timer = null;
-        const debounced = function (...args) {
-            clearTimeout(timer);
-            timer = setTimeout(() => fn.apply(this, args), wait);
-        };
-        debounced.cancel = () => clearTimeout(timer);
-        return debounced;
-    }
-
-    // Ждём DOM-элемент через MutationObserver, а не предполагаем, что он уже есть.
-    function waitForElement(selector, { root = document, timeout = 15000 } = {}) {
-        return new Promise((resolve, reject) => {
-            const existing = root.querySelector?.(selector);
-            if (existing) { resolve(existing); return; }
-
-            const observeRoot = root === document
-                ? document.documentElement || document
-                : root;
-
-            let finished = false;
-
-            const observer = new MutationObserver(() => {
-                const found = root.querySelector?.(selector);
-                if (!found) return;
-                finished = true;
-                observer.disconnect();
-                clearTimeout(timer);
-                unregisterCleanup();
-                resolve(found);
-            });
-
-            const timer = setTimeout(() => {
-                if (finished) return;
-                observer.disconnect();
-                unregisterCleanup();
-                reject(new Error(`Элемент "${selector}" не найден за ${timeout} мс`));
-            }, timeout);
-
-            const stop = () => { observer.disconnect(); clearTimeout(timer); };
-            const unregisterCleanup = addCleanup(stop);
-
-            observer.observe(observeRoot, { childList: true, subtree: true });
-        });
-    }
-
-    // Обрабатываем только добавленные узлы, чтобы не делать полный querySelectorAll на каждую мутацию.
-    function observeAddedElements(selector, callback, { root = document } = {}) {
-        const scanNode = (node) => {
-            if (!(node instanceof Element)) return;
-            if (node.matches(selector)) callback(node);
-            node.querySelectorAll?.(selector).forEach(callback);
-        };
-
-        root.querySelectorAll?.(selector).forEach(callback);
-
-        const observeRoot = root === document
-            ? document.documentElement || document
-            : root;
-
-        const observer = new MutationObserver((mutations) => {
-            for (const mutation of mutations) mutation.addedNodes.forEach(scanNode);
-        });
-
-        observer.observe(observeRoot, { childList: true, subtree: true });
-
-        let unregisterCleanup = null;
-        const stop = () => {
-            observer.disconnect();
-            if (unregisterCleanup) { unregisterCleanup(); unregisterCleanup = null; }
-        };
-        unregisterCleanup = addCleanup(stop);
-        return stop;
-    }
-
-    // SPA: патчим history.pushState/replaceState + popstate вместо setInterval.
-    // Вызывать только один раз — повторный вызов вернёт no-op.
-    function onUrlChange(callback) {
-        if (urlChangeInstalled) {
-            warn('onUrlChange уже установлен — повторный вызов игнорируется.');
-            return () => {};
-        }
-        urlChangeInstalled = true;
-
-        let lastUrl = location.href;
-
-        const notify = () => {
-            const current = location.href;
-            if (current === lastUrl) return;
-            lastUrl = current;
-            callback(current);
-        };
-
-        const origPush    = history.pushState.bind(history);
-        const origReplace = history.replaceState.bind(history);
-
-        history.pushState = function (...args) {
-            origPush(...args);
-            notify();
-        };
-        history.replaceState = function (...args) {
-            origReplace(...args);
-            notify();
-        };
-
-        window.addEventListener('popstate', notify);
-        window.addEventListener('hashchange', notify);
-
-        const stop = () => {
-            history.pushState    = origPush;
-            history.replaceState = origReplace;
-            window.removeEventListener('popstate', notify);
-            window.removeEventListener('hashchange', notify);
-            urlChangeInstalled = false;
-        };
-
-        addCleanup(stop);
-        return stop;
     }
 
     // Оставляем только цифры, "." и ","; затем убираем разделители по краям.
@@ -249,13 +129,14 @@
         boundInputs.add(input);
         // capture=true позволяет очистить вставку до большинства обработчиков страницы.
         input.addEventListener('paste', onPasteHandler, true);
-        addCleanup(() => input.removeEventListener('paste', onPasteHandler, true));
     }
 
     async function bootstrap() {
+        cleanupRoute();
+        if (domObserverStop) { domObserverStop(); domObserverStop = null; }
+
         try {
             await waitForElement('body', { timeout: 15000 }).catch(() => null);
-            if (domObserverStop) { domObserverStop(); domObserverStop = null; }
             document.querySelectorAll(TARGET_SELECTOR).forEach(bindInput);
             domObserverStop = observeAddedElements(TARGET_SELECTOR, bindInput);
         } catch (err) {
@@ -265,7 +146,11 @@
 
     const rebootstrap = debounce(bootstrap, 150);
 
-    window.addEventListener('pagehide', cleanup, { once: true });
+    window.addEventListener('pagehide', () => {
+        cleanup();
+        if (domObserverStop) { domObserverStop(); domObserverStop = null; }
+    }, { once: true });
+
     onUrlChange(() => rebootstrap());
     bootstrap();
 })();
