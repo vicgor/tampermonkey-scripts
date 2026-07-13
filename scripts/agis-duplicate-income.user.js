@@ -47,8 +47,8 @@
   const WAIT_TIMEOUT = 15000;
 
   // registerDebugToggle асинхронный — debugCtl.value равен false до его резолва.
-  // bootstrap() стартует не дожидаясь этого (см. низ файла), чтобы не откладывать
-  // первый поиск body/таблицы/формы на await GM_getValue/миграцию.
+  // bootstrap() не дожидается именно registerDebugToggle (см. низ файла) — только
+  // migrateLegacyStorage(), которая гонится с initCreatePage() за тем же ключом.
   let debugCtl = { value: false };
   const log  = (...a) => { if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a); };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
@@ -201,14 +201,16 @@
     let data;
     try { data = JSON.parse(raw); } catch (e) { warn('Неверный payload:', e); return; }
 
-    await storageSet(STORAGE_KEY, null);
-    if (!routeTokenController.isCurrent(token)) return;
-
     try { await waitForElement('input[name$="[incomeDate]"]', { timeout: 10000 }); }
     catch (e) { warn('Форма не появилась:', e.message); return; }
     if (!routeTokenController.isCurrent(token)) return;
 
     fillForm(data);
+    // Удаляем payload после успешного заполнения, а не сразу после чтения:
+    // если форма не появится или fillForm упадёт, payload останется для повторной
+    // попытки вместо того, чтобы молча потеряться. storageDelete (не storageSet(...,
+    // null)) — не оставляет ключ в хранилище со значением null.
+    await storageDelete(STORAGE_KEY);
   }
 
   function fillForm(data) {
@@ -263,13 +265,17 @@
     stopUrlWatcher();
   }, { once: true });
 
-  // Миграция storage — параллельно bootstrap. Страница создания у пользователя с момента
-  // клика до чтения payload в initCreatePage проходит минимум 100мс на редирект —
-  // миграция успевает завершиться. При гонке — откат через следующий запуск.
+  // Миграция ДОЛЖНА завершиться до первого bootstrap: initCreatePage() читает
+  // STORAGE_KEY, и если миграция ещё не перенесла туда legacy payload
+  // (переход сразу с v2.5, минуя v3.0), первое чтение увидит пустой ключ и
+  // молча ничего не заполнит — миграция допишет данные слишком поздно.
+  // registerDebugToggle запущен ПОСЛЕ миграции (чтобы прочитать уже
+  // мигрированный DEBUG_KEY), но НЕ awaited — не блокирует bootstrap().
   (async () => {
     await migrateLegacyStorage();
-    debugCtl = await registerDebugToggle(SCRIPT_NS, DEBUG_KEY);
+    bootstrap();
+    registerDebugToggle(SCRIPT_NS, DEBUG_KEY)
+      .then((ctl) => { debugCtl = ctl; })
+      .catch((err) => warn('Инициализация debug-toggle не удалась:', err));
   })();
-
-  bootstrap();
 })();
