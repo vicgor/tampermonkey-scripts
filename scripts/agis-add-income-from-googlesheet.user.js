@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS автозаполнение из Google Sheets
 // @namespace    agis.income.googlesheet
-// @version      4.4
+// @version      4.5
 // @description  Автозаполнение формы AGIS из Google Таблицы (CSV Publish). Запрос через GM_xmlhttpRequest (обходит CSP).
 // @match        https://agis.creditsmile.ru/*/loan*/*/income/create
 // @match        https://agis.belkacredit.ru/*/loan*/*/income/create
@@ -264,11 +264,15 @@
       alert('Для номера заявки ' + id + ' нет данных в таблице!');
       return;
     }
-    await waitForAndFill('[id$="_bankPaymentId"]', fill.order);
-    await waitForAndFill('[id$="_income"]',        fill.sum);
-    await waitForAndFill('[id$="_incomeDate"]',    toDateTimeString(fill.date));
-    await waitForAndFill('[id$="_comment"]',       fill.comment);
-    await waitForAndFill('[id$="_manualIncomeType"]', fill.incomeType);
+    // Тег обязателен в селекторе: Sonata Admin оборачивает каждое поле в
+    // <div id="sonata-ba-field-container-..._income">, чей id тоже оканчивается
+    // на "_income" — без тега querySelector находил эту обёртку раньше настоящего
+    // <input>, и .value = ... беззвучно оседал на div, не долетая до формы.
+    await waitForAndFill('input[id$="_bankPaymentId"]',  fill.order);
+    await waitForAndFill('input[id$="_income"]',         fill.sum);
+    await waitForAndFill('input[id$="_incomeDate"]',     toDateTimeString(fill.date));
+    await waitForAndFill('textarea[id$="_comment"]',     fill.comment);
+    await waitForAndFill('select[id$="_manualIncomeType"]', fill.incomeType);
     log('Автозаполнение:', id, fill);
   }
 
