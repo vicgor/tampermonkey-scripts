@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - linkify loannote
 // @namespace    agis.linkify.loannote
-// @version      3.1
+// @version      3.2
 // @description  Делает ссылки кликабельными в колонке "Контент" на страницах loannote/list. Поддерживает markdown-ссылки, голые URL и тикеты Jira RUSUPPORT-*.
 // @match        https://agis.volgazaim.ru/admin/*/loannote/list*
 // @match        https://agis.creditsmile.ru/admin/*/loannote/list*
@@ -43,10 +43,12 @@
   const CELL_SELECTOR = 'table.sonata-ba-list td.sonata-ba-list-field-textarea';
   const WAIT_TIMEOUT  = 15000;
 
-  // registerDebugToggle асинхронный — debugCtl.value равен false до его резолва.
-  // onUrlChange/bootstrap стартуют не дожидаясь этого (см. низ файла), чтобы не
-  // задерживать SPA-watcher; единственная цена — первая строка лога может не
-  // напечататься, даже если debug был включён раньше.
+  // registerDebugToggle асинхронный — debugCtl.value равен false, пока не резолвится.
+  // onUrlChange устанавливается синхронно (см. низ файла) — SPA-watcher не задерживается.
+  // bootstrap() же дожидается регистрации debug-toggle перед первым запуском: иначе
+  // на страницах, где CELL_SELECTOR уже есть в DOM при старте, log() внутри processCell
+  // мог выполниться раньше, чем резолвится debugCtl, и debug-логи не появились бы вовсе
+  // (см. agis-duplicate-income.user.js, где эта гонка реально проявилась).
   let debugCtl = { value: false };
   const log  = (...a) => { if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a); };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
@@ -200,7 +202,12 @@
     stopUrlWatcher();
   }, { once: true });
 
-  registerDebugToggle(SCRIPT_NS, DEBUG_KEY).then((ctl) => { debugCtl = ctl; });
-
-  bootstrap('document-start');
+  (async () => {
+    try {
+      debugCtl = await registerDebugToggle(SCRIPT_NS, DEBUG_KEY);
+    } catch (err) {
+      warn('Инициализация debug-toggle не удалась:', err);
+    }
+    bootstrap('document-start');
+  })();
 })();

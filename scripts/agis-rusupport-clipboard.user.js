@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS: вставка RUSUPPORT в содержание заметки
 // @namespace    agis.rusupport.clipboard
-// @version      2.1.0
+// @version      2.2.0
 // @description  Вставляет текст из буфера обмена в поле "Содержание" при создании заметки к займу, только если текст содержит слово RUSUPPORT.
 // @author       vicgor
 // @match        https://agis.volgazaim.ru/admin/*/loan*/*/loannote/create*
@@ -57,12 +57,11 @@
   const DEBUG_KEY     = `${SCRIPT_NS}:debug`;
   const DEBUG_KEY_OLD = 'debug_rusupport';
 
-  // registerDebugToggle асинхронный — debugCtl.value равен false до его резолва.
-  // bootstrap('document-start') стартует не дожидаясь этого (см. низ файла), чтобы
-  // не откладывать первый поиск textarea на await GM_getValue/migrateLegacyDebugKey.
-  // Цена: если debug уже был включён в хранилище, первые строки лога этого запуска
-  // (в т.ч. само "Инициализация: document-start") могут не напечататься — догонит
-  // только следующий вызов log() после резолва промиса.
+  // registerDebugToggle асинхронный — debugCtl.value равен false, пока не резолвится.
+  // bootstrap() дожидается миграции старого debug-ключа и регистрации debug-toggle
+  // перед первым запуском (см. низ файла) — иначе log() внутри initContentField мог
+  // выполниться раньше, чем резолвится debugCtl, и debug-логи не появились бы вовсе
+  // (см. agis-duplicate-income.user.js, где эта гонка реально проявилась).
   let debugCtl = { value: false };
   const log  = (...a) => { if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a); };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
@@ -314,8 +313,11 @@
 
   (async () => {
     await migrateLegacyDebugKey();
-    debugCtl = await registerDebugToggle(SCRIPT_NS, DEBUG_KEY);
+    try {
+      debugCtl = await registerDebugToggle(SCRIPT_NS, DEBUG_KEY);
+    } catch (err) {
+      warn('Инициализация debug-toggle не удалась:', err);
+    }
+    bootstrap('document-start');
   })();
-
-  bootstrap('document-start');
 })();
