@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      5.1
+// @version      5.2
 // @description  Полноширинная строка под навбаром с информацией о займе и цветным статусом
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*
@@ -300,7 +300,11 @@
 
         data.priceList = getRowValue(doc, /^Прайслист$/);
         data.loanType  = getRowValue(doc, /^Тип$/);
-        data.status    = getRowValue(doc, /^Статус\b/, { firstTextOnly: true });
+        // \b не годится для кириллицы: \w — только ASCII, поэтому граница "слова"
+        // никогда не находится ни до, ни после кириллического текста, и /^Статус\b/
+        // не матчился НИКОГДА (баг с v5.0, статус не отображался с самого начала).
+        // Точное совпадение, как у priceList/loanType, вместо \b.
+        data.status    = getRowValue(doc, /^Статус$/, { firstTextOnly: true });
 
         return applyDateFormatting(compactData(data));
     }
