@@ -46,9 +46,10 @@
   const DEBUG_KEY    = 'agis:duplicate-income:debug';
   const WAIT_TIMEOUT = 15000;
 
-  // registerDebugToggle асинхронный — debugCtl.value равен false до его резолва.
-  // bootstrap() не дожидается именно registerDebugToggle (см. низ файла) — только
-  // migrateLegacyStorage(), которая гонится с initCreatePage() за тем же ключом.
+  // registerDebugToggle асинхронный — debugCtl.value равен false, пока не резолвится.
+  // bootstrap() дожидается и миграции, и регистрации debug-toggle (см. низ файла) —
+  // иначе на этой странице log() внутри initCreatePage/initListPage успевал
+  // выполниться раньше, чем debugCtl обновлялся, и debug-логи не появлялись вовсе.
   let debugCtl = { value: false };
   const log  = (...a) => { if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a); };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
@@ -269,13 +270,20 @@
   // STORAGE_KEY, и если миграция ещё не перенесла туда legacy payload
   // (переход сразу с v2.5, минуя v3.0), первое чтение увидит пустой ключ и
   // молча ничего не заполнит — миграция допишет данные слишком поздно.
-  // registerDebugToggle запущен ПОСЛЕ миграции (чтобы прочитать уже
-  // мигрированный DEBUG_KEY), но НЕ awaited — не блокирует bootstrap().
+  //
+  // registerDebugToggle тоже awaited перед bootstrap — НЕ fire-and-forget, как
+  // было раньше. На практике waitForElement(incomeDate) в initCreatePage резолвится
+  // почти мгновенно (форма уже есть в статическом HTML), и log('Заполнено:', ...)
+  // успевал выполниться раньше, чем резолвился registerDebugToggle — debug-логи
+  // не появлялись вообще, а не просто "первая строка потеряна". Цена ожидания —
+  // один GM_getValue (единицы мс), не отложенная навигация/redirect.
   (async () => {
     await migrateLegacyStorage();
+    try {
+      debugCtl = await registerDebugToggle(SCRIPT_NS, DEBUG_KEY);
+    } catch (err) {
+      warn('Инициализация debug-toggle не удалась:', err);
+    }
     bootstrap();
-    registerDebugToggle(SCRIPT_NS, DEBUG_KEY)
-      .then((ctl) => { debugCtl = ctl; })
-      .catch((err) => warn('Инициализация debug-toggle не удалась:', err));
   })();
 })();
