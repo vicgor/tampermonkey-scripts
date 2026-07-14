@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS автозаполнение из Google Sheets
 // @namespace    agis.income.googlesheet
-// @version      4.3
+// @version      4.4
 // @description  Автозаполнение формы AGIS из Google Таблицы (CSV Publish). Запрос через GM_xmlhttpRequest (обходит CSP).
 // @match        https://agis.creditsmile.ru/*/loan*/*/income/create
 // @match        https://agis.belkacredit.ru/*/loan*/*/income/create
@@ -164,11 +164,17 @@
         if (option) {
           input.value = option.value;
           input.dispatchEvent(new Event('change', { bubbles: true }));
+          if (window.jQuery) window.jQuery(input).trigger('change');
         }
       } else {
-        input.value = value;
+        // Прямое input.value = ... не долетает до контролируемых полей формы AGIS —
+        // визуально поле остаётся пустым, хотя DOM-атрибут меняется (см. agis-duplicate-income.user.js,
+        // где та же форма заполняется именно через нативный сеттер прототипа).
+        const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')?.set;
+        if (setter) setter.call(input, value); else input.value = value;
         input.dispatchEvent(new Event('input',  { bubbles: true }));
         input.dispatchEvent(new Event('change', { bubbles: true }));
+        if (window.jQuery) window.jQuery(input).trigger('change');
       }
     } catch (e) {
       warn(`Поле "${selector}" не найдено:`, e.message);
