@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      5.0
+// @version      5.2
 // @description  Полноширинная строка под навбаром с информацией о займе и цветным статусом
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*
@@ -13,6 +13,7 @@
 // @match        https://agis.moneymania.ru/admin/agis2/core/loan*
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-loan-info-navbar.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-loan-info-navbar.user.js
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.1.0/lib/agis-core.js#sha256=mrgmLBDYkBLsL/GI0rVsuHT8V8QjzhXSEneovVOIL4Y=
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_getValue
@@ -29,6 +30,23 @@
 
 (function () {
     'use strict';
+
+    if (!window.__AGIS_CORE__) {
+        console.error('[agis:loan-info] agis-core.js не загружен (@require не сработал)');
+        return;
+    }
+
+    const {
+        debounce,
+        cleanupRoute: coreCleanupRoute,
+        cleanup,
+        storageGet,
+        storageSetDebounced,
+        waitForElement,
+        api,
+        onUrlChange,
+        createRouteTokenController,
+    } = window.__AGIS_CORE__;
 
     // Стандарт репо: SCRIPT_NS = agis:<feature> (для лога и storage), DOM_NS — без двоеточия (для CSS/id).
     const SCRIPT_NS    = 'agis:loan-info';
@@ -49,16 +67,11 @@
     const CACHE_VERSION = 'v45';
     const WAIT_TIMEOUT = 20000;
 
-    let routeToken = 0;
-    let lastUrl    = location.href;
+    const routeTokenController = createRouteTokenController();
     let lastRenderSignature = '';
-    let urlChangeInstalled  = false;
 
-    const observers    = new Set();
-    const timers       = new Set();
-    const storageTimers = new Map();
-
-    // Ссылка на функцию отключения единственного table-observerа, чтобы чистить при cleanupRoute
+    // Ссылка на функцию отключения единственного table-observerа, чтобы чистить при cleanupRoute.
+    // Не входит в общий observers ядра (см. core-template.user.js, паттерн stopExtraObserver).
     let stopTableObserver = null;
 
     const STATUS_RED = new Set([
@@ -93,96 +106,19 @@
 
     // --- Утилиты ---
 
-    function setManagedTimeout(callback, delay) {
-        const timer = setTimeout(() => { timers.delete(timer); callback(); }, delay);
-        timers.add(timer);
-        return timer;
-    }
-
+    // Дополняет cleanupRoute ядра: сам ядро чистит только свои waitForElement-observer'ы/таймеры,
+    // table-observer и sig-состояние рендера — забота этого скрипта.
     function cleanupRoute() {
-        for (const observer of observers) observer.disconnect();
-        observers.clear();
-        for (const timer of timers) clearTimeout(timer);
-        timers.clear();
-        // Отключаем единственный table-observer
+        coreCleanupRoute();
         if (stopTableObserver) { stopTableObserver(); stopTableObserver = null; }
         lastRenderSignature = '';
     }
 
-    function debounce(fn, wait = 250) {
-        let timer = null;
-        function debounced(...args) {
-            clearTimeout(timer);
-            timer = setTimeout(() => fn.apply(this, args), wait);
-        }
-        debounced.cancel = () => { clearTimeout(timer); timer = null; };
-        return debounced;
-    }
-
-    async function storageGet(key, fallback = null) {
-        try {
-            const value = await GM_getValue(key, fallback);
-            return value === undefined ? fallback : value;
-        } catch (err) {
-            console.warn(`[${SCRIPT_NS}] GM_getValue error:`, err);
-            return fallback;
-        }
-    }
-
-    function storageSetDebounced(key, value, wait = 300) {
-        const oldTimer = storageTimers.get(key);
-        if (oldTimer) clearTimeout(oldTimer);
-        const timer = setTimeout(async () => {
-            storageTimers.delete(key);
-            try { await GM_setValue(key, value); }
-            catch (err) { console.warn(`[${SCRIPT_NS}] GM_setValue error:`, err); }
-        }, wait);
-        storageTimers.set(key, timer);
-    }
-
     // --- DOM-ожидание ---
-
-    function waitForElement(selector, { root = document, timeout = WAIT_TIMEOUT } = {}) {
-        return new Promise((resolve, reject) => {
-            let done = false;
-            let observer = null;
-
-            const query = () => { try { return root.querySelector(selector); } catch (_) { return null; } };
-
-            let timeoutTimer = null;
-            const finish = (el) => {
-                if (done) return; done = true;
-                if (observer) { observer.disconnect(); observers.delete(observer); }
-                if (timeoutTimer !== null) { clearTimeout(timeoutTimer); timers.delete(timeoutTimer); }
-                resolve(el);
-            };
-            const fail = () => {
-                if (done) return; done = true;
-                if (observer) { observer.disconnect(); observers.delete(observer); }
-                reject(new Error(`waitForElement: "${selector}" not found`));
-            };
-
-            const existing = query();
-            if (existing) { finish(existing); return; }
-
-            timeoutTimer = setManagedTimeout(fail, timeout);
-
-            const startObserve = () => {
-                if (done) return;
-                const observeRoot = root === document ? document.documentElement || document.body : root;
-                if (!observeRoot) { setManagedTimeout(startObserve, 50); return; }
-                observer = new MutationObserver(() => { const el = query(); if (el) finish(el); });
-                observer.observe(observeRoot, { childList: true, subtree: true });
-                observers.add(observer);
-                const el = query(); if (el) finish(el);
-            };
-            startObserve();
-        });
-    }
 
     // Fallback-поиск навбара: пробуем селекторы по очереди; если ни один не найден, логируем и бросаем ошибку
     function waitForNavbar() {
-        return waitForElement(NAVBAR_SELECTORS.join(', '))
+        return waitForElement(NAVBAR_SELECTORS.join(', '), { timeout: WAIT_TIMEOUT })
             .catch((err) => {
                 console.warn(
                     `[${SCRIPT_NS}] Навбар не найден за ${WAIT_TIMEOUT} мс (${location.href}).`,
@@ -193,6 +129,8 @@
     }
 
     // Единственный MutationObserver для слежения за изменениями таблиц. Возвращает функцию отключения.
+    // Реагирует только на НОВЫЕ узлы (в отличие от observeAddedElements ядра, не обрабатывает
+    // существующий DOM при установке) — существующий контент уже разобран в bootstrap() напрямую.
     function observeTableChanges(callback) {
         const root = document.body || document.documentElement;
         if (!root) return () => {};
@@ -210,39 +148,6 @@
         });
         obs.observe(root, { childList: true, subtree: true });
         return () => obs.disconnect();
-    }
-
-    // onUrlChange должен вызываться ровно один раз за время жизни страницы.
-    function onUrlChange(callback) {
-        if (urlChangeInstalled) {
-            console.warn(`[${SCRIPT_NS}] onUrlChange уже установлен — повторный вызов игнорируется.`);
-            return () => {};
-        }
-        urlChangeInstalled = true;
-
-        const check = debounce(() => {
-            if (location.href === lastUrl) return;
-            lastUrl = location.href;
-            callback(location.href);
-        }, 100);
-
-        const origPush    = history.pushState;
-        const origReplace = history.replaceState;
-        history.pushState    = function (...a) { const r = origPush.apply(this, a);    check(); return r; };
-        history.replaceState = function (...a) { const r = origReplace.apply(this, a); check(); return r; };
-        window.addEventListener('popstate',   check);
-        window.addEventListener('hashchange', check);
-        const interval = setInterval(check, 1000);
-
-        return () => {
-            history.pushState    = origPush;
-            history.replaceState = origReplace;
-            window.removeEventListener('popstate',   check);
-            window.removeEventListener('hashchange', check);
-            clearInterval(interval);
-            check.cancel();
-            urlChangeInstalled = false;
-        };
     }
 
     // --- Нормализация текста и дат ---
@@ -395,7 +300,11 @@
 
         data.priceList = getRowValue(doc, /^Прайслист$/);
         data.loanType  = getRowValue(doc, /^Тип$/);
-        data.status    = getRowValue(doc, /^Статус\b/, { firstTextOnly: true });
+        // \b не годится для кириллицы: \w — только ASCII, поэтому граница "слова"
+        // никогда не находится ни до, ни после кириллического текста, и /^Статус\b/
+        // не матчился НИКОГДА (баг с v5.0, статус не отображался с самого начала).
+        // Точное совпадение, как у priceList/loanType, вместо \b.
+        data.status    = getRowValue(doc, /^Статус$/, { firstTextOnly: true });
 
         return applyDateFormatting(compactData(data));
     }
@@ -417,29 +326,19 @@
     }
 
     // --- Запрос к бэкенду (fallback когда DOM пустой и кеш устарел) ---
-    // Использует GM_xmlhttpRequest чтобы обойти CSP сайта.
+    // api.getHtml оборачивает GM_xmlhttpRequest, чтобы обойти CSP сайта.
     // URL абсолютный — context.host берётся из текущего location.
-    function fetchFromBackend(context) {
+    async function fetchFromBackend(context) {
         const url = `https://${context.host}/admin/agis2/core/${context.section}/${context.id}/show`;
-        return new Promise((resolve, reject) => {
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url,
-                timeout: 20000,
-                onload: (resp) => {
-                    if (resp.status !== 200) {
-                        reject(new Error(`fetchFromBackend: HTTP ${resp.status} (${url})`));
-                        return;
-                    }
-                    const doc = new DOMParser().parseFromString(resp.responseText, 'text/html');
-                    const data = parseDoc(doc);
-                    if (hasUsefulData(data)) resolve(data);
-                    else reject(new Error('fetchFromBackend: no useful data in /show response'));
-                },
-                onerror:   (_e) => reject(new Error(`fetchFromBackend: network error (${url})`)),
-                ontimeout: () => reject(new Error(`fetchFromBackend: timeout (${url})`)),
-            });
-        });
+        let doc;
+        try {
+            ({ doc } = await api.getHtml(url));
+        } catch (err) {
+            throw new Error(`fetchFromBackend: ${err.message}`);
+        }
+        const data = parseDoc(doc);
+        if (!hasUsefulData(data)) throw new Error(`fetchFromBackend: no useful data in /show response (${url})`);
+        return data;
     }
 
     // --- Рендеринг ---
@@ -545,7 +444,7 @@
     }
 
     async function bootstrap(reason = 'start') {
-        const token = ++routeToken;
+        const token = routeTokenController.next();
         cleanupRoute(); // отключает в том числе старый stopTableObserver
 
         const context = parseLoanContextFromUrl();
@@ -559,17 +458,17 @@
             const navbar = await waitForNavbar();
 
             // Первая проверка токена: сразу после получения navbar, до любой работы с данными.
-            if (token !== routeToken) return;
+            if (!routeTokenController.isCurrent(token)) return;
 
             const parsed = await refreshFromDocument(context, navbar);
 
             // Вторая проверка токена: после асинхронного парсинга документа.
-            if (token !== routeToken) return;
+            if (!routeTokenController.isCurrent(token)) return;
 
             if (!parsed) {
                 const cached = await readCache(context);
                 // Третья проверка токена: после потенциально медленного GM_getValue.
-                if (token !== routeToken) return;
+                if (!routeTokenController.isCurrent(token)) return;
 
                 if (cached) {
                     render(context, cached, navbar);
@@ -580,7 +479,7 @@
                     try {
                         const backendData = await fetchFromBackend(context);
                         // Четвёртая проверка токена: после сетевого запроса (самый долгий await).
-                        if (token !== routeToken) return;
+                        if (!routeTokenController.isCurrent(token)) return;
                         writeCache(context, backendData);
                         render(context, backendData, navbar);
                     } catch (e) {
@@ -591,7 +490,7 @@
 
             // Единственный observer на изменения таблиц — перезапускает парсинг с debounce
             const delayedRefresh = debounce(async () => {
-                if (token !== routeToken) return;
+                if (!routeTokenController.isCurrent(token)) return;
                 const ctx = parseLoanContextFromUrl();
                 if (!ctx || ctx.cacheKey !== context.cacheKey) return;
                 await refreshFromDocument(ctx, navbar);
@@ -606,10 +505,9 @@
     const stopUrlWatcher = onUrlChange(() => bootstrap('url-change'));
 
     window.addEventListener('pagehide', () => {
-        cleanupRoute();
+        if (stopTableObserver) { stopTableObserver(); stopTableObserver = null; }
+        cleanup();
         stopUrlWatcher();
-        for (const timer of storageTimers.values()) clearTimeout(timer);
-        storageTimers.clear();
     }, { once: true });
 
     bootstrap('document-start');
