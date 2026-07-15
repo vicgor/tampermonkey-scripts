@@ -8,9 +8,9 @@
 
 ## Текущее состояние
 
-Волна 1 и Волна 2 (см. ниже) завершены для 6 из 7 скриптов. `lib/agis-core.js`
-опубликован и реально переиспользуется через `@require` + SRI-хеш — это уже не
-«канон на бумаге».
+Волна 1 и Волна 2 полностью завершены — все 7 скриптов на общем ядре.
+`lib/agis-core.js` опубликован и реально переиспользуется через `@require` +
+SRI-хеш — это уже не «канон на бумаге».
 
 **Скрипты в проде (`scripts/*.user.js`):**
 
@@ -19,16 +19,16 @@
 | `agis-loan-info-navbar` | 5.2 | v1.1.0 | Волна 2 завершена (PR #20). Попутно исправлен баг: `\b` не работает на границе кириллицы, статус займа не парсился вообще |
 | `agis-duplicate-income` | 3.1 | v1.1.0 | Волна 2 завершена (PR #18) |
 | `agis-add-income-from-googlesheet` | 4.5 | v1.1.0 | Волна 2 завершена (PR #19). Попутно исправлены баги заполнения формы: селекторы без тега матчились на `sonata-ba-field-container-*` обёртку вместо `<input>`, плюс нужен нативный сеттер `value` |
+| `agis-protocol-income-fill` | 2.1 | v1.1.0 | Волна 2 завершена (PR #22) — последний из семи. Попутно унифицирован `showBanner`/`registerDebugToggle`, поправлен тайминг `onUrlChange` (раньше устанавливался после `await`, SPA-переход в первые мгновения мог быть пропущен) |
 | `agis-paste-cleaner-amount` | 1.9 | v1.0.0 | Волна 2 завершена (PR #13/#14) — пилот `@require` |
 | `agis-linkify-loan-note` | 3.2 | v1.0.0 | Волна 2 завершена (PR #15), debug-toggle await-фикс (PR #21) |
 | `agis-rusupport-clipboard` | 2.2.0 | v1.0.0 | Волна 2 завершена (PR #16), debug-toggle await-фикс (PR #21) |
-| `agis-protocol-income-fill` | 2.0 | — | Волна 1 пройдена (все 7 доменов, свои canon-совместимые `waitForElement`/`onUrlChange`/`routeToken`), **но ещё не переведён на `@require lib/agis-core.js`** — единственный оставшийся скрипт Волны 2 |
 
 **Оставшиеся расхождения:**
 
-- `agis-protocol-income-fill` — единственный скрипт с локальными копиями `waitForElement`/`onUrlChange`/`debounce`/`storageGet` вместо `lib/agis-core.js`. Функционально canon-совместим (Волна 1 пройдена), просто не мигрирован.
-- Волна 3 (баннер, `registerDebugToggle`-меню, общий словарь доменов, конфиг-словари) ещё не начата — см. ниже.
+- Волна 3 (общий словарь доменов, конфиг-словари вроде `GATEWAY_MAP`/`STATUS_*`/`RU_MONTHS`) ещё не начата — единый `showBanner`/`registerDebugToggle` уже фактически сделаны через ядро, см. ниже.
 - README запрещает `setInterval`-поллинг для ожидания DOM; `setInterval` внутри `onUrlChange`-реализаций (canon и `lib/agis-core.js`) — не в счёт, это осознанный fallback-поллинг URL раз в секунду на случай пропущенного `pushState`/`popstate`, а не ожидание появления элемента.
+- `core-template.user.js` всё ещё существует как отдельный самостоятельный userscript-канон, а не как пример-потребитель `lib/agis-core.js` — см. открытый вопрос в Волне 2.
 
 **Находки, не отражённые в исходном плане волн:** миграция на общее ядро несколько
 раз попутно вскрывала реальные баги, которые предшествовали `@require`-переносу
@@ -37,7 +37,14 @@ googlesheet — заполнение формы не работало из-за 
 нативного сеттера; navbar — статус займа никогда не отображался из-за `\b` в
 регэкспе; linkify/rusupport — `registerDebugToggle()` не был awaited перед первым
 `bootstrap()`, из-за чего на некоторых страницах debug-логи могли не появляться
-вообще. Все три найдены и закрыты в ходе ручной browser-проверки перед мержем.
+вообще; protocol-income-fill — `onUrlChange` устанавливался после `await`,
+рискуя пропустить первый SPA-переход, и migration-логи в трёх скриптах
+(googlesheet/duplicate-income/protocol-income-fill) гейтированы debug-флагом,
+который на момент их вызова ещё не резолвится, — то есть никогда не печатаются
+(в protocol-income-fill исправлено на безусловный `console.log`, в двух других
+пока оставлено как есть). Все найдены и закрыты (кроме двух последних
+migration-логов) в ходе ручной browser-проверки и внешнего code review перед
+мержем каждого PR.
 
 ---
 
@@ -55,17 +62,16 @@ googlesheet — заполнение формы не работало из-за 
 
 ---
 
-## Волна 2 — Общее ядро через `@require` ✅ Завершено для 6 из 7 скриптов
+## Волна 2 — Общее ядро через `@require` ✅ Завершено
 
 **Цель:** сделать общий каркас реально переиспользуемым, а не «каноном на бумаге».
 
 - [x] Создан `lib/agis-core.js`, экспортирует API через `window.__AGIS_CORE__`:
   `debounce`, `cleanupRoute`, `cleanup`, `storageGet`, `storageSet`, `storageSetDebounced`, `storageDelete`, `waitForElement`, `observeAddedElements`, `httpRequest`, `api.getJson/postJson/getHtml`, `onUrlChange`, `createRouteTokenController`, `showBanner`, `registerDebugToggle`.
 - [x] Опубликован через GitHub Raw + версионированные теги `v1.0.0` и `v1.1.0` (добавил `storageSet`/`storageDelete` для случаев, когда нужна немедленная, не debounced запись перед навигацией) — оба **с SRI-хешем** (`#sha256=...`).
-- [x] Мигрированы: `agis-paste-cleaner-amount` (пилот, PR #13/#14), `agis-linkify-loan-note` (#15), `agis-rusupport-clipboard` (#16), `agis-duplicate-income` (#18), `agis-add-income-from-googlesheet` (#19), `agis-loan-info-navbar` (#20).
-- [x] Общий паттерн `registerDebugToggle()` — await перед первым `bootstrap()`, а не fire-and-forget (найдено и исправлено сначала в #18, затем унифицировано в linkify/rusupport через #21 — иначе debug-логи могли не появляться вовсе на страницах, где нужный DOM уже присутствует при старте).
-- [ ] **`agis-protocol-income-fill`** — единственный немигрированный скрипт. План миграции идентичен остальным: заменить локальные `waitForElement`/`onUrlChange`/`debounce`/`storageGet`/`routeToken` на `window.__AGIS_CORE__`, `@require` тег `v1.1.0` + SRI-хеш, сохранить предметную логику (парсинг протокола, заполнение формы) без изменений. Скорее всего самый крупный из оставшихся по объёму специфичного кода — стоит выделить отдельный PR, как и для остальных шести.
-- [ ] `core-template.user.js` всё ещё существует как отдельный самостоятельный userscript-канон — вопрос, превращать ли его в `templates/example-consumer.user.js` (пример потребителя `lib/agis-core.js`), остаётся открытым до завершения миграции последнего скрипта.
+- [x] Мигрированы все 7 скриптов: `agis-paste-cleaner-amount` (пилот, PR #13/#14), `agis-linkify-loan-note` (#15), `agis-rusupport-clipboard` (#16), `agis-duplicate-income` (#18), `agis-add-income-from-googlesheet` (#19), `agis-loan-info-navbar` (#20), `agis-protocol-income-fill` (#22).
+- [x] Общий паттерн `registerDebugToggle()` — await перед первым `bootstrap()`, а не fire-and-forget (найдено и исправлено сначала в #18, затем унифицировано в linkify/rusupport через #21, сразу учтено в #22 — иначе debug-логи могли не появляться вовсе на страницах, где нужный DOM уже присутствует при старте).
+- [ ] `core-template.user.js` всё ещё существует как отдельный самостоятельный userscript-канон. Открытый вопрос: превращать ли его в `templates/example-consumer.user.js` (пример потребителя `lib/agis-core.js`) теперь, когда все 7 production-скриптов реально мигрированы и служат живыми примерами использования ядра.
 
 **Профит (подтверждено на практике):** каждый мигрированный скрипт похудел на
 100–150 строк дублирующего кода; три реальных, ранее незамеченных бага
@@ -86,11 +92,11 @@ googlesheet — заполнение формы не работало из-за 
 **Цель:** одинаковое поведение и внешний вид скриптов, единый источник справочников.
 **Оценка:** 1 день. **Приоритет:** после Волны 2, можно параллельно с Волной 4.
 
-- [x] **Единый `showBanner`** — сделан в ядре (`window.__AGIS_CORE__.showBanner`, типы `success`/`error`/`info`) и уже используется в `dup-income`/`googlesheet`/`navbar` через миграцию Волны 2. Остаётся только `protocol-income-fill` — закроется вместе с его миграцией на ядро.
-- [x] **Единое меню Tampermonkey** — `registerDebugToggle(scriptNs, debugKey)` в ядре, используется в `linkify`/`rusupport`/`duplicate-income`/`googlesheet`. Остаётся только `protocol-income-fill`.
+- [x] **Единый `showBanner`** — сделан в ядре (`window.__AGIS_CORE__.showBanner`, типы `success`/`error`/`info`) и используется во всех 7 скриптах после Волны 2.
+- [x] **Единое меню Tampermonkey** — `registerDebugToggle(scriptNs, debugKey)` в ядре, используется во всех 7 скриптах.
+- [x] **Единый префикс лога.** Все 7 скриптов используют `[agis:<feature>]` (см. `SCRIPT_NS` в каждом).
 - [ ] **Общий словарь доменов AGIS.** Ввести правило: **все скрипты покрывают все 7 доменов**, если нет причины для сужения. Причина должна быть в комментарии над `@match`. Список доменов в `README.md` как источник истины.
 - [ ] **Конфиг-объект в отдельном файле.** Вынести `GATEWAY_MAP`, `STATUS_RED/YELLOW/GREEN`, `RU_MONTHS`, `JIRA_BASE` в `config/agis-dictionaries.js` и подтягивать через `@require`.
-- [ ] **Единый префикс лога.** Все мигрированные скрипты уже используют `[agis:<feature>]` (см. `SCRIPT_NS` в каждом). Осталось свериться с `protocol-income-fill` после его миграции.
 
 ---
 
@@ -131,9 +137,9 @@ googlesheet — заполнение формы не работало из-за 
 | Задача | Impact | Effort | Статус |
 |---|---|---|---|
 | Волна 1 (быстрые фиксы) | высокий | 3–4 ч | ✅ завершено |
-| Волна 2 (`@require` ядро) | максимальный | 1 день | 6 из 7 скриптов, `protocol-income-fill` в очереди |
+| Волна 2 (`@require` ядро) | максимальный | 1 день | ✅ завершено (все 7 скриптов) |
 | Волна 4.1 + 4.2 (lint / prettier) | средний | 2 ч | не начато |
-| Волна 3 (UX-унификация) | средний | 1 день | не начато — можно начинать, ядро стабильно |
+| Волна 3 (UX-унификация) | средний | 1 день | частично (showBanner/registerDebugToggle/лог-префикс — через ядро); словари/домены — не начато |
 | Волна 4.3–4.5 (CI + релиз) | средний | 1 день | не начато |
 | Волна 5 (TS + тесты) | низкий, растущий | несколько вечеров | не начато |
 
@@ -141,8 +147,9 @@ googlesheet — заполнение формы не работало из-за 
 
 ## Что взять первым
 
-1. Домигрировать **`agis-protocol-income-fill`** на `lib/agis-core.js` (`@require` тег `v1.1.0` + SRI) — единственный оставшийся скрипт Волны 2. Тот же процесс, что и для остальных шести: PR → ручная browser-проверка → мерж.
-2. После этого — Волна 3 (единый `showBanner`/`registerDebugToggle` уже фактически унифицированы через ядро; осталось вынести `GATEWAY_MAP`/`STATUS_*`/`RU_MONTHS`/`JIRA_BASE` в общий словарь и договориться о едином префиксе лога).
+1. Волна 3, оставшееся: вынести `GATEWAY_MAP`/`STATUS_*`/`RU_MONTHS`/`JIRA_BASE` в `config/agis-dictionaries.js`, договориться о едином правиле покрытия всех 7 доменов AGIS.
+2. Решить судьбу `core-template.user.js` — оставить каноном-документацией или переоформить в `templates/example-consumer.user.js`.
+3. Волна 4.1/4.2 (ESLint/Prettier) можно начинать параллельно, независимо от Волны 3.
 
 ---
 
