@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - дублировать приход
 // @namespace    agis.duplicate.income
-// @version      3.1
+// @version      3.2
 // @description  Клик по строке прихода → открыть форму создания и автозаполнить (дата, шлюз, внешний ID, сумма). Ручное подтверждение.
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan*/*/income/*
@@ -10,7 +10,7 @@
 // @match        https://agis.belkacredit.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.credit7.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.credit365.ru/admin/agis2/core/loan*/*/income/*
-// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.1.0/lib/agis-core.js#sha256=mrgmLBDYkBLsL/GI0rVsuHT8V8QjzhXSEneovVOIL4Y=
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.2.0/lib/agis-core.js#sha256=dV8YKJZ5amc3KVhAYRg7WBQV/dUGFM4UwLKXLN8RZRg=
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_setValue
@@ -38,6 +38,7 @@
     storageSet,
     storageDelete,
     showBanner,
+    ruMonthNumber,
   } = window.__AGIS_CORE__;
 
   const SCRIPT_NS    = 'agis:duplicate-income';
@@ -123,13 +124,12 @@
 
   function normalizeDate(s) {
     if (!s) return '';
-    const months = { 'янв':1,'фев':2,'мар':3,'апр':4,'май':5,'мая':5,'июн':6,'июл':7,'авг':8,'сен':9,'окт':10,'ноя':11,'дек':12 };
     const m = s.match(/(\d{1,2})\s+([a-zа-яё]+)\.?\s+(\d{4}).*?(\d{1,2}):(\d{2}):(\d{2})/i);
     if (!m) return '';
-    const mon = months[m[2].toLowerCase().slice(0, 3)];
-    if (!mon) return '';
+    const month = ruMonthNumber(m[2]);
+    if (!month) return '';
     const pad = n => String(n).padStart(2, '0');
-    return `${m[3]}-${pad(mon)}-${pad(m[1])} ${pad(m[4])}:${m[5]}:${m[6]}`;
+    return `${m[3]}-${month}-${pad(m[1])} ${pad(m[4])}:${m[5]}:${m[6]}`;
   }
 
   // --- Страница списка ---
