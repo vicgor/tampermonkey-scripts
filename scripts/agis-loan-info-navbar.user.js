@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      5.2
+// @version      5.3
 // @description  Полноширинная строка под навбаром с информацией о займе и цветным статусом
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*
@@ -13,7 +13,7 @@
 // @match        https://agis.moneymania.ru/admin/agis2/core/loan*
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-loan-info-navbar.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-loan-info-navbar.user.js
-// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.1.0/lib/agis-core.js#sha256=mrgmLBDYkBLsL/GI0rVsuHT8V8QjzhXSEneovVOIL4Y=
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.2.0/lib/agis-core.js#sha256=dV8YKJZ5amc3KVhAYRg7WBQV/dUGFM4UwLKXLN8RZRg=
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_getValue
@@ -46,6 +46,7 @@
         api,
         onUrlChange,
         createRouteTokenController,
+        ruMonthNumber,
     } = window.__AGIS_CORE__;
 
     // Стандарт репо: SCRIPT_NS = agis:<feature> (для лога и storage), DOM_NS — без двоеточия (для CSS/id).
@@ -88,21 +89,6 @@
         'проблема верификации', 'ожидание суммы от клиента',
     ]);
     const STATUS_GREEN  = new Set(['активный кредит', 'продлен', 'в работе коллектора']);
-
-    const RU_MONTHS = new Map([
-        ['января','01'],['январь','01'],['янв.','01'],['янв','01'],
-        ['февраля','02'],['февраль','02'],['февр.','02'],['февр','02'],['фев.','02'],['фев','02'],
-        ['марта','03'],['март','03'],['мар.','03'],['мар','03'],
-        ['апреля','04'],['апрель','04'],['апр.','04'],['апр','04'],
-        ['мая','05'],['май','05'],
-        ['июня','06'],['июнь','06'],['июн.','06'],['июн','06'],
-        ['июля','07'],['июль','07'],['июл.','07'],['июл','07'],
-        ['августа','08'],['август','08'],['авг.','08'],['авг','08'],
-        ['сентября','09'],['сентябрь','09'],['сент.','09'],['сент','09'],['сен.','09'],['сен','09'],
-        ['октября','10'],['октябрь','10'],['окт.','10'],['окт','10'],
-        ['ноября','11'],['ноябрь','11'],['нояб.','11'],['нояб','11'],['ноя.','11'],['ноя','11'],
-        ['декабря','12'],['декабрь','12'],['дек.','12'],['дек','12'],
-    ]);
 
     // --- Утилиты ---
 
@@ -188,8 +174,7 @@
         // Текстовый AGIS: "13 февр. 2026 г." / "9 мар. 2026 г. на 24 дня"
         const txt = text.toLowerCase().match(/\b(\d{1,2})\s+((?:[а-яё]+\.?)+)\s+(\d{2,4})(?:\s*г\.?)?/u);
         if (txt) {
-            const raw = txt[2].trim();
-            const month = RU_MONTHS.get(raw) ?? RU_MONTHS.get(raw.replace(/\.$/, '') + '.') ?? RU_MONTHS.get(raw.replace(/\.$/, ''));
+            const month = ruMonthNumber(txt[2].trim());
             if (month) return buildShortDate(txt[1], month, txt[3]) || text;
         }
 
