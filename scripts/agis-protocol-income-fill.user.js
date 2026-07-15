@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - вставка прихода из протокола
 // @namespace    agis.protocol.income.fill
-// @version      2.0
+// @version      2.1
 // @description  Клик по строке протокола сохраняет данные; автопереход на список приходов нужного займа; на странице создания прихода кнопка вставки заполняет форму.
 // @match        https://agis.volgazaim.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*/income/list*
@@ -40,6 +40,7 @@
 // @match        https://agis.credit365.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-protocol-income-fill.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-protocol-income-fill.user.js
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.1.0/lib/agis-core.js#sha256=mrgmLBDYkBLsL/GI0rVsuHT8V8QjzhXSEneovVOIL4Y=
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_setValue
@@ -51,6 +52,25 @@
 (() => {
   'use strict';
 
+  if (!window.__AGIS_CORE__) {
+    console.error('[agis:protocol-income] agis-core.js не загружен (@require не сработал)');
+    return;
+  }
+
+  const {
+    debounce,
+    cleanupRoute,
+    cleanup,
+    storageGet,
+    storageSet,
+    storageDelete,
+    waitForElement,
+    onUrlChange,
+    createRouteTokenController,
+    showBanner,
+    registerDebugToggle,
+  } = window.__AGIS_CORE__;
+
   const SCRIPT_NS = 'agis:protocol-income';
   // ID для DOM-элементов и CSS-классов (не содержит двоеточия, чтобы не ломать CSS-селекторы).
   const DOM_NS = 'agis-protocol-income';
@@ -59,222 +79,47 @@
   const WAIT_TIMEOUT = 15000;
   const FORM_WAIT_TIMEOUT = 10000;
 
-  let DEBUG = false;
+  // registerDebugToggle асинхронный — debugCtl.value равен false, пока не резолвится.
+  // bootstrap() дожидается и миграции легаси-ключей, и регистрации debug-toggle перед
+  // первым запуском (см. низ файла) — иначе log() внутри initListPage/initCreatePage мог
+  // выполниться раньше, чем резолвится debugCtl, и debug-логи не появились бы вовсе
+  // (см. agis-duplicate-income.user.js, где эта гонка реально проявилась).
+  let debugCtl = { value: false };
 
-  const observers = new Set();
-  const timers = new Set();
-  let routeToken = 0;
-  let lastUrl = location.href;
-  let urlChangeInstalled = false;
+  const routeTokenController = createRouteTokenController();
 
   function log(...args) {
-    if (DEBUG) console.log(`[${SCRIPT_NS}]`, ...args);
+    if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...args);
   }
 
   function warn(...args) {
     console.warn(`[${SCRIPT_NS}]`, ...args);
   }
 
-  function setManagedTimeout(cb, delay) {
-    const timer = setTimeout(() => {
-      timers.delete(timer);
-      cb();
-    }, delay);
-    timers.add(timer);
-    return timer;
-  }
-
-  function debounce(fn, wait = 250) {
-    let timer = null;
-
-    function debounced(...args) {
-      clearTimeout(timer);
-      timer = setTimeout(() => fn.apply(this, args), wait);
-    }
-
-    debounced.cancel = () => {
-      clearTimeout(timer);
-      timer = null;
-    };
-
-    return debounced;
-  }
-
-  function cleanupRoute() {
-    for (const observer of observers) observer.disconnect();
-    observers.clear();
-
-    for (const timer of timers) clearTimeout(timer);
-    timers.clear();
-  }
-
-  function onUrlChange(callback) {
-    if (urlChangeInstalled) {
-      warn('onUrlChange уже установлен — повторный вызов игнорируется.');
-      return () => {};
-    }
-    urlChangeInstalled = true;
-
-    const check = debounce(() => {
-      if (location.href === lastUrl) return;
-      lastUrl = location.href;
-      callback(location.href);
-    }, 100);
-
-    const origPush = history.pushState;
-    const origReplace = history.replaceState;
-
-    history.pushState = function (...args) {
-      const result = origPush.apply(this, args);
-      check();
-      return result;
-    };
-
-    history.replaceState = function (...args) {
-      const result = origReplace.apply(this, args);
-      check();
-      return result;
-    };
-
-    window.addEventListener('popstate', check);
-    window.addEventListener('hashchange', check);
-    const interval = setInterval(check, 1000);
-
-    return () => {
-      history.pushState = origPush;
-      history.replaceState = origReplace;
-      window.removeEventListener('popstate', check);
-      window.removeEventListener('hashchange', check);
-      clearInterval(interval);
-      check.cancel();
-      urlChangeInstalled = false;
-    };
-  }
-
-  async function storageGet(key, fallback = null) {
-    try {
-      const value = await GM_getValue(key, fallback);
-      return value === undefined ? fallback : value;
-    } catch (error) {
-      warn('GM_getValue ошибка:', key, error);
-      return fallback;
-    }
-  }
-
-  async function storageSet(key, value) {
-    try {
-      await GM_setValue(key, value);
-    } catch (error) {
-      warn('GM_setValue ошибка:', key, error);
-    }
-  }
-
-  async function storageDelete(key) {
-    try {
-      await GM_deleteValue(key);
-    } catch (error) {
-      warn('GM_deleteValue ошибка:', key, error);
-    }
-  }
-
-  async function initDebugFlag() {
-    DEBUG = !!(await storageGet(DEBUG_KEY, false));
-
-    // Миграция storage-ключей с v1.x (плоские имена) на v2.x (namespace + версия).
-    // Разовая операция: если новый ключ пуст, а старый есть — переносим и чистим старый.
+  // Миграция storage-ключей с v1.x (плоские имена) на v2.x (namespace + версия).
+  // Разовая операция: если новый ключ пуст, а старый есть — переносим и чистим старый.
+  async function migrateLegacyStorage() {
     try {
       const legacyDebug = await storageGet('debug_protocol_income_fill', undefined);
       if (legacyDebug !== undefined && !(await storageGet(DEBUG_KEY, undefined))) {
         await storageSet(DEBUG_KEY, !!legacyDebug);
-        DEBUG = !!legacyDebug;
         await storageDelete('debug_protocol_income_fill');
+        // Безусловный console.log, не log(): миграция выполняется до резолва
+        // registerDebugToggle (debugCtl.value ещё false), так что гейтированный
+        // лог здесь никогда бы не напечатался — событие одноразовое и редкое,
+        // ценность диагностики важнее debug-гейта.
+        console.log(`[${SCRIPT_NS}] Миграция storage: debug флаг перенесён`);
       }
 
       const legacyPayload = await storageGet('agis_protocol_income_payload', undefined);
       if (legacyPayload !== undefined && !(await storageGet(STORAGE_KEY, undefined))) {
         await storageSet(STORAGE_KEY, legacyPayload);
         await storageDelete('agis_protocol_income_payload');
+        console.log(`[${SCRIPT_NS}] Миграция storage: payload перенесён`);
       }
     } catch (error) {
       warn('Миграция storage не удалась:', error);
     }
-  }
-
-  function registerMenu() {
-    GM_registerMenuCommand(
-      `Debug-логи: ${DEBUG ? '✅ вкл' : '⬜ выкл'} — нажмите для переключения`,
-      async () => {
-        DEBUG = !DEBUG;
-        await storageSet(DEBUG_KEY, DEBUG);
-        alert(`[${SCRIPT_NS}] Debug-логи ${DEBUG ? 'включены' : 'выключены'}. Обновите страницу.`);
-      }
-    );
-  }
-
-  function waitForElement(selector, { root = document, timeout = WAIT_TIMEOUT } = {}) {
-    return new Promise((resolve, reject) => {
-      let done = false;
-      let observer = null;
-      let timeoutTimer = null;
-
-      const query = () => {
-        try {
-          return root.querySelector(selector);
-        } catch {
-          return null;
-        }
-      };
-
-      const finish = (element) => {
-        if (done) return;
-        done = true;
-        observer?.disconnect();
-        observers.delete(observer);
-
-        if (timeoutTimer !== null) {
-          clearTimeout(timeoutTimer);
-          timers.delete(timeoutTimer);
-        }
-
-        resolve(element);
-      };
-
-      const fail = () => {
-        if (done) return;
-        done = true;
-        observer?.disconnect();
-        observers.delete(observer);
-        reject(new Error(`waitForElement: "${selector}" не найден за ${timeout}мс`));
-      };
-
-      const existing = query();
-      if (existing) return finish(existing);
-
-      timeoutTimer = setManagedTimeout(fail, timeout);
-
-      const startObserve = () => {
-        if (done) return;
-
-        const observeRoot = root === document ? (document.documentElement || document.body) : root;
-        if (!observeRoot) {
-          setManagedTimeout(startObserve, 50);
-          return;
-        }
-
-        observer = new MutationObserver(() => {
-          const element = query();
-          if (element) finish(element);
-        });
-
-        observer.observe(observeRoot, { childList: true, subtree: true });
-        observers.add(observer);
-
-        const element = query();
-        if (element) finish(element);
-      };
-
-      startObserve();
-    });
   }
 
   function normalizeText(value) {
@@ -322,29 +167,6 @@
     return `/admin/agis2/core/${type}/${loanId}/income/list`;
   }
 
-  function showToast(text, { color = '#00a65a', duration = 3000 } = {}) {
-    const toast = document.createElement('div');
-    toast.textContent = text;
-
-    Object.assign(toast.style, {
-      position: 'fixed',
-      top: '60px',
-      right: '20px',
-      zIndex: '99999',
-      background: color,
-      color: '#fff',
-      padding: '10px 14px',
-      borderRadius: '4px',
-      boxShadow: '0 2px 8px rgba(0,0,0,.2)',
-      fontSize: '14px',
-      maxWidth: '420px'
-    });
-
-    document.body.appendChild(toast);
-    setManagedTimeout(() => toast.remove(), duration);
-    return toast;
-  }
-
   async function initListPage(token) {
     let table;
 
@@ -355,7 +177,7 @@
       return;
     }
 
-    if (token !== routeToken) return;
+    if (!routeTokenController.isCurrent(token)) return;
 
     const colIndex = getHeaderMap(table);
     log('Колонки:', colIndex);
@@ -401,14 +223,14 @@
         log('Пайлоад:', payload);
         await storageSet(STORAGE_KEY, payload);
 
-        showToast(
+        showBanner(
           `Сохранено: займ ${payload.loanId || '-'}, дата ${payload.incomeDate || '-'}, сумма ${payload.amount || '-'}, заказ ${payload.orderNumber || '-'}`,
-          { duration: 2500 }
+          { type: 'success', durationMs: 2500 }
         );
 
         if (!loanId) {
           warn('Не удалось определить ID займа для перехода.');
-          showToast('Не удалось определить ID займа для перехода.', { color: '#dd4b39', duration: 3500 });
+          showBanner('Не удалось определить ID займа для перехода.', { type: 'error', durationMs: 3500 });
           return;
         }
 
@@ -596,7 +418,7 @@
     // Это защищает от удаления данных из storage при частичном заполнении формы.
     const success = dateOk && amountOk;
 
-    showToast(
+    showBanner(
       [
         success ? 'Поля заполнены.' : 'Не удалось заполнить поля.',
         `Дата: ${dateOk ? 'OK' : 'нет'}`,
@@ -604,7 +426,7 @@
         `Сумма: ${amountOk ? 'OK' : 'нет'}`,
         `ID займа: ${loanIdFromUrl || 'из URL не определён'}`
       ].join(' '),
-      { color: success ? '#00a65a' : '#dd4b39', duration: 5000 }
+      { type: success ? 'success' : 'error', durationMs: 5000 }
     );
 
     log('Заполнено:', { data, loanIdFromUrl, dateOk, orderOk, amountOk, success });
@@ -632,7 +454,7 @@
       return;
     }
 
-    if (token !== routeToken) return;
+    if (!routeTokenController.isCurrent(token)) return;
 
     const fillHandler = async () => {
       const data = await storageGet(STORAGE_KEY, null);
@@ -660,7 +482,7 @@
   }
 
   async function bootstrap() {
-    const token = ++routeToken;
+    const token = routeTokenController.next();
     cleanupRoute();
 
     try {
@@ -670,7 +492,7 @@
       return;
     }
 
-    if (token !== routeToken) return;
+    if (!routeTokenController.isCurrent(token)) return;
 
     const path = location.pathname;
 
@@ -689,21 +511,24 @@
     }
   }
 
+  // onUrlChange устанавливается синхронно, до любых await — SPA-watcher не должен
+  // ждать миграцию storage/регистрацию debug-toggle (см. bootstrap-инициализацию ниже).
+  const stopUrlWatcher = onUrlChange(() => {
+    bootstrap().catch((error) => warn('bootstrap error:', error));
+  });
+
+  window.addEventListener('pagehide', () => {
+    cleanup();
+    stopUrlWatcher();
+  }, { once: true });
+
   (async () => {
-    await initDebugFlag();
-    registerMenu();
-
-    // bootstrap() вызывается без await намеренно — onUrlChange не должен блокироваться.
-    // .catch() перехватывает необработанные rejection при SPA-навигации.
-    const stopUrlWatcher = onUrlChange(() => {
-      bootstrap().catch((error) => warn('bootstrap error:', error));
-    });
-
-    window.addEventListener('pagehide', () => {
-      cleanupRoute();
-      stopUrlWatcher();
-    }, { once: true });
-
+    await migrateLegacyStorage();
+    try {
+      debugCtl = await registerDebugToggle(SCRIPT_NS, DEBUG_KEY);
+    } catch (err) {
+      warn('Инициализация debug-toggle не удалась:', err);
+    }
     bootstrap();
   })();
 })();
