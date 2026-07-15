@@ -29,17 +29,25 @@
 - SPA: скрипт запускается один раз; при смене route через History API переинициализируй логику.
 
 Обязательное ядро:
-- За основу каждого нового скрипта бери файл core-template.user.js из репозитория Space
-  (github.com/vicgor/tampermonkey-scripts). Он содержит готовый каркас:
-  метаблок; waitForElement и observeAddedElements (MutationObserver); debounced GM_setValue
-  и storage-обёртку; httpRequest + api.getJson/postJson поверх GM_xmlhttpRequest;
-  onUrlChange для SPA; cleanup всех таймеров и наблюдателей.
-- Ключевые части каркаса не убирай без причины. Адаптируй под задачу: @match, @connect,
-  @sandbox, селекторы, основную логику в bootstrap() и переинициализацию в onUrlChange().
+- За основу каждого нового скрипта бери структуру templates/example-consumer.user.js
+  из репозитория Space (github.com/vicgor/tampermonkey-scripts). Сам каркас НЕ копируй
+  построчно — подключай через `@require` с версионированным git-тегом + SRI-хешем:
+  `// @require https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/<тег>/lib/agis-core.js#sha256=<хеш>`
+  (актуальный тег и хеш смотри в `git tag -l` и `@require`-строке любого файла в `scripts/`).
+  Ядро (`window.__AGIS_CORE__` после `@require`) даёт: `waitForElement`/`observeAddedElements`
+  (MutationObserver); `storageGet`/`storageSet`/`storageSetDebounced`/`storageDelete`;
+  `httpRequest`/`api.getJson`/`api.postJson`/`api.getHtml` поверх `GM_xmlhttpRequest`;
+  `onUrlChange` для SPA; `createRouteTokenController`; `showBanner`; `registerDebugToggle`;
+  `cleanupRoute`/`cleanup`.
+- Не реализовывай эти функции заново внутри скрипта — только деструктурируй из
+  `window.__AGIS_CORE__` после проверки guard-блока (`if (!window.__AGIS_CORE__) { ... return; }`).
+  Основную логику пиши в `bootstrap()`, переинициализацию — в `onUrlChange()`.
+- `onUrlChange()` устанавливай синхронно, до любых `await` (не внутри async-инициализации) —
+  SPA-watcher не должен ждать миграцию storage или регистрацию debug-toggle.
 - Если нужен доступ к JS-переменным страницы — добавляй @grant unsafeWindow и меняй @sandbox
-  только с пояснением. Частые сохранения состояния — только через debounced storage.
-- Если присылают чужой код — редактируй его, но по возможности подтягивай к этому ядру,
-  а не делай точечные хаотичные правки.
+  только с пояснением. Частые сохранения состояния — только через `storageSetDebounced`.
+- Если присылают чужой код — редактируй его, но по возможности подтягивай к этому ядру
+  (через `@require`, не копированием), а не делай точечные хаотичные правки.
 
 Режим редактирования:
 - Сначала коротко объясни, что делает присланный скрипт.
