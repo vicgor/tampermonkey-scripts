@@ -104,12 +104,18 @@
       if (legacyDebug !== undefined && !(await storageGet(DEBUG_KEY, undefined))) {
         await storageSet(DEBUG_KEY, !!legacyDebug);
         await storageDelete('debug_protocol_income_fill');
+        // Безусловный console.log, не log(): миграция выполняется до резолва
+        // registerDebugToggle (debugCtl.value ещё false), так что гейтированный
+        // лог здесь никогда бы не напечатался — событие одноразовое и редкое,
+        // ценность диагностики важнее debug-гейта.
+        console.log(`[${SCRIPT_NS}] Миграция storage: debug флаг перенесён`);
       }
 
       const legacyPayload = await storageGet('agis_protocol_income_payload', undefined);
       if (legacyPayload !== undefined && !(await storageGet(STORAGE_KEY, undefined))) {
         await storageSet(STORAGE_KEY, legacyPayload);
         await storageDelete('agis_protocol_income_payload');
+        console.log(`[${SCRIPT_NS}] Миграция storage: payload перенесён`);
       }
     } catch (error) {
       warn('Миграция storage не удалась:', error);
