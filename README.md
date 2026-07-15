@@ -35,6 +35,22 @@ tampermonkey-scripts/
 
 ## Стандарты userscript’ов
 
+### Домены AGIS — источник истины
+
+Все скрипты покрывают все 7 брендов/доменов AGIS, если нет явной причины для
+сужения (причина указывается в комментарии над `@match`). Это канонический
+список — 7 доменов, ни больше, ни меньше:
+
+| Бренд | Домен |
+|---|---|
+| CreditSmile | `agis.creditsmile.ru` |
+| BelkaCredit | `agis.belkacredit.ru` |
+| VolgaZaim | `agis.volgazaim.ru` |
+| BerryCash | `agis.berrycash.ru` |
+| MoneyMania | `agis.moneymania.ru` |
+| Credit7 | `agis.credit7.ru` |
+| Credit365 | `agis.credit365.ru` |
+
 ### Метаблок: обязательный минимум
 
 | Директива | Требование |
@@ -81,6 +97,7 @@ tampermonkey-scripts/
 
 - [ ] `@name`, `@namespace`, `@version`, `@description` — заполнены, без заглушек
 - [ ] `@match` — точный паттерн, не шире `*://*/*`. Хотя бы одна `@match` есть
+- [ ] `@match` покрывает все 7 доменов AGIS (см. таблицу выше), если нет причины для сужения — причина в комментарии над `@match`
 - [ ] `@grant` — перечислены только те, что реально вызываются в коде
 - [ ] `@connect` — есть для каждого `GM_xmlhttpRequest`-хоста, не `*`
 - [ ] `@run-at` — выбор обоснован (см. таблицу выше)
