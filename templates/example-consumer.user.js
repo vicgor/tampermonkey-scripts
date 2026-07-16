@@ -68,6 +68,15 @@
   // что и в agis-loan-info-navbar.user.js/agis-linkify-loan-note.user.js).
   let stopExtraObserver = null;
 
+  // Обязательна в ДВУХ местах: в начале bootstrap() (новый маршрут — старый extra-observer
+  // больше не нужен) и в pagehide (страница выгружается — снимаем всё). Вынесена в отдельную
+  // функцию вместо дублирования инлайн-блока в обоих местах (как исторически сложилось в
+  // agis-loan-info-navbar.user.js) — так после правки логики очистки не нужно помнить оба
+  // места, достаточно поменять один раз здесь.
+  function stopExtraObserverIfAny() {
+    if (stopExtraObserver) { stopExtraObserver(); stopExtraObserver = null; }
+  }
+
   // --- Предметная логика (замени на свою) ---
   function parsePage() {
     // TODO: разбор DOM, возвращает данные или null/undefined, если на странице их нет
@@ -93,7 +102,7 @@
     const token = routeTokenController.next();
     // Отключаем extra-observer предыдущего маршрута — cleanupRoute() ядра его не
     // трогает (он не входит в общий observers Set, владение только через stopFn).
-    if (stopExtraObserver) { stopExtraObserver(); stopExtraObserver = null; }
+    stopExtraObserverIfAny();
     cleanupRoute(); // всегда первым действием
     log('Инициализация:', reason);
 
@@ -153,7 +162,7 @@
   });
 
   window.addEventListener('pagehide', () => {
-    if (stopExtraObserver) { stopExtraObserver(); stopExtraObserver = null; }
+    stopExtraObserverIfAny();
     cleanup();
     stopUrlWatcher();
   }, { once: true });
