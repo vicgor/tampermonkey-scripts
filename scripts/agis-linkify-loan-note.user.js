@@ -36,12 +36,12 @@
   } = window.__AGIS_CORE__;
 
   // --- Настройки ---
-  const SCRIPT_NS     = 'agis:linkify';
-  const DEBUG_KEY     = 'agis:linkify:debug';
-  const JIRA_BASE     = 'https://jira.aventus.work/browse/';
-  const STYLE_ID      = 'tm-loannote-style';
+  const SCRIPT_NS = 'agis:linkify';
+  const DEBUG_KEY = 'agis:linkify:debug';
+  const JIRA_BASE = 'https://jira.aventus.work/browse/';
+  const STYLE_ID = 'tm-loannote-style';
   const CELL_SELECTOR = 'table.sonata-ba-list td.sonata-ba-list-field-textarea';
-  const WAIT_TIMEOUT  = 15000;
+  const WAIT_TIMEOUT = 15000;
 
   // registerDebugToggle асинхронный — debugCtl.value равен false, пока не резолвится.
   // onUrlChange устанавливается синхронно (см. низ файла) — SPA-watcher не задерживается.
@@ -50,7 +50,9 @@
   // мог выполниться раньше, чем резолвится debugCtl, и debug-логи не появились бы вовсе
   // (см. agis-duplicate-income.user.js, где эта гонка реально проявилась).
   let debugCtl = { value: false };
-  const log  = (...a) => { if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a); };
+  const log = (...a) => {
+    if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a);
+  };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
 
   const routeTokenController = createRouteTokenController();
@@ -135,7 +137,7 @@
 
       if (isMarkdown) {
         const label = match[1];
-        const url   = match[2];
+        const url = match[2];
         const className = /RUSUPPORT-\d+/i.test(url) ? 'tm-jira-link' : 'tm-external-link';
         frag.appendChild(createLink(url, label, className));
       } else if (/^https?:\/\//i.test(token)) {
@@ -173,7 +175,10 @@
   async function bootstrap(reason = 'start') {
     const token = routeTokenController.next();
     cleanupRoute();
-    if (stopExtraObserver) { stopExtraObserver(); stopExtraObserver = null; }
+    if (stopExtraObserver) {
+      stopExtraObserver();
+      stopExtraObserver = null;
+    }
     log('Инициализация:', reason);
 
     try {
@@ -196,11 +201,18 @@
   // --- Запуск ---
   const stopUrlWatcher = onUrlChange(() => bootstrap('url-change'));
 
-  window.addEventListener('pagehide', () => {
-    cleanupRoute();
-    if (stopExtraObserver) { stopExtraObserver(); stopExtraObserver = null; }
-    stopUrlWatcher();
-  }, { once: true });
+  window.addEventListener(
+    'pagehide',
+    () => {
+      cleanupRoute();
+      if (stopExtraObserver) {
+        stopExtraObserver();
+        stopExtraObserver = null;
+      }
+      stopUrlWatcher();
+    },
+    { once: true },
+  );
 
   (async () => {
     try {

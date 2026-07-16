@@ -48,17 +48,19 @@
   } = window.__AGIS_CORE__;
 
   // --- Настройки ---
-  const SCRIPT_NS    = 'agis:example';        // <- заменить, формат "agis:<feature>"
-  const STORAGE_KEY   = `${SCRIPT_NS}:cache:v1`; // версия в ключе — на случай смены формата кэша
-  const DEBUG_KEY     = `${SCRIPT_NS}:debug`;
-  const WAIT_TIMEOUT  = 15000;
+  const SCRIPT_NS = 'agis:example'; // <- заменить, формат "agis:<feature>"
+  const STORAGE_KEY = `${SCRIPT_NS}:cache:v1`; // версия в ключе — на случай смены формата кэша
+  const DEBUG_KEY = `${SCRIPT_NS}:debug`;
+  const WAIT_TIMEOUT = 15000;
 
   // registerDebugToggle асинхронный — debugCtl.value равен false, пока не резолвится.
   // bootstrap() дожидается его регистрации перед первым запуском (см. низ файла) —
   // иначе log() внутри bootstrap мог бы выполниться раньше, чем debugCtl обновится,
   // и debug-логи не появились бы вовсе (см. agis-duplicate-income.user.js).
   let debugCtl = { value: false };
-  const log  = (...a) => { if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a); };
+  const log = (...a) => {
+    if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a);
+  };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
 
   const routeTokenController = createRouteTokenController();
@@ -74,7 +76,10 @@
   // agis-loan-info-navbar.user.js) — так после правки логики очистки не нужно помнить оба
   // места, достаточно поменять один раз здесь.
   function stopExtraObserverIfAny() {
-    if (stopExtraObserver) { stopExtraObserver(); stopExtraObserver = null; }
+    if (stopExtraObserver) {
+      stopExtraObserver();
+      stopExtraObserver = null;
+    }
   }
 
   // --- Предметная логика (замени на свою) ---
@@ -161,11 +166,15 @@
     bootstrap('url-change');
   });
 
-  window.addEventListener('pagehide', () => {
-    stopExtraObserverIfAny();
-    cleanup();
-    stopUrlWatcher();
-  }, { once: true });
+  window.addEventListener(
+    'pagehide',
+    () => {
+      stopExtraObserverIfAny();
+      cleanup();
+      stopUrlWatcher();
+    },
+    { once: true },
+  );
 
   (async () => {
     try {

@@ -35,6 +35,30 @@ tampermonkey-scripts/
 
 ---
 
+## Инструменты разработки (ESLint + Prettier)
+
+`package.json` есть только ради качества кода — сами userscript'ы не собираются
+и не бандлятся, ставятся в Tampermonkey как есть.
+
+```bash
+npm install
+npm run lint          # ESLint: метаблок, инварианты каркаса, безопасность рендера
+npm run format        # Prettier --write (2 пробела, одинарные кавычки)
+npm run format:check  # Prettier --check, без изменений — для проверки перед коммитом
+```
+
+Конфиг ESLint (`eslint.config.js`) проверяет:
+- корректность метаблока (`@name`/`@version`/`@grant`/... через `eslint-plugin-userscripts`);
+- запрет `fetch()`/`XMLHttpRequest` (напоминание про `GM_xmlhttpRequest`/`api.*` из `lib/agis-core.js`);
+- запрет `setInterval` вместо `MutationObserver` (кроме обоснованных fallback-случаев — глуши точечно через `eslint-disable-next-line` с комментарием, зачем);
+- запрет `innerHTML` (используй `textContent`/DOM API).
+
+Prettier — 2 пробела, одинарные кавычки, точка с запятой, ширина строки 120.
+Не форматирует `*.md` (таблицы и кириллица в них форматируются Prettier не всегда
+аккуратно) — только `.js`/`.user.js`.
+
+---
+
 ## Стандарты userscript’ов
 
 ### Домены AGIS — источник истины
@@ -93,7 +117,10 @@ tampermonkey-scripts/
 
 ## Чеклист code review
 
-Перед мержем любого PR со 0 штрафов проверяем каждый пункт.
+Перед мержем любого PR со 0 штрафов проверяем каждый пункт. Часть пунктов
+(метаблок, `fetch`/`XMLHttpRequest`, `setInterval`, `innerHTML`) уже проверяет
+`npm run lint` — но это дополнение к ручному ревью, не замена: линтер не видит
+архитектурные вещи вроде `routeToken`/`cleanupRoute`/debounce хранилища.
 
 ### Метаблок
 

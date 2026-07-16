@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - вставка прихода из протокола
 // @namespace    agis.protocol.income.fill
-// @version      2.1
+// @version      2.1.1
 // @description  Клик по строке протокола сохраняет данные; автопереход на список приходов нужного займа; на странице создания прихода кнопка вставки заполняет форму.
 // @match        https://agis.volgazaim.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*/income/list*
@@ -58,7 +58,6 @@
   }
 
   const {
-    debounce,
     cleanupRoute,
     cleanup,
     storageGet,
@@ -187,7 +186,7 @@
       style.id = `${DOM_NS}-list-style`;
       style.textContent = [
         'tr.bc-protocol-copy-row { cursor: copy; }',
-        'tr.bc-protocol-copy-row:hover td { background: #fff7d6 !important; }'
+        'tr.bc-protocol-copy-row:hover td { background: #fff7d6 !important; }',
       ].join('\n');
       document.head.appendChild(style);
     }
@@ -215,7 +214,7 @@
           loanId,
           incomeDate: colIndex.incomeDate !== undefined ? cellText(cells[colIndex.incomeDate]) : '',
           amount: colIndex.amount !== undefined ? parseAmount(cellText(cells[colIndex.amount])) : '',
-          orderNumber: colIndex.orderNumber !== undefined ? cellText(cells[colIndex.orderNumber]) : '-'
+          orderNumber: colIndex.orderNumber !== undefined ? cellText(cells[colIndex.orderNumber]) : '-',
         };
 
         if (!payload.orderNumber) payload.orderNumber = '-';
@@ -225,7 +224,7 @@
 
         showBanner(
           `Сохранено: займ ${payload.loanId || '-'}, дата ${payload.incomeDate || '-'}, сумма ${payload.amount || '-'}, заказ ${payload.orderNumber || '-'}`,
-          { type: 'success', durationMs: 2500 }
+          { type: 'success', durationMs: 2500 },
         );
 
         if (!loanId) {
@@ -274,7 +273,7 @@
       'input[name$="[incomeDate]"]',
       'input[aria-label="Номер заказа*"]',
       'input[aria-label="Сумма платежа*"]',
-      'textarea'
+      'textarea',
     ].join(', ');
 
     return waitForElement(selector, { timeout: FORM_WAIT_TIMEOUT });
@@ -320,7 +319,7 @@
 
     Object.assign(btn.style, {
       marginLeft: '8px',
-      whiteSpace: 'nowrap'
+      whiteSpace: 'nowrap',
     });
 
     btn.addEventListener('click', handler);
@@ -337,7 +336,7 @@
       Object.assign(wrapper.style, {
         display: 'inline-flex',
         alignItems: 'center',
-        marginLeft: '8px'
+        marginLeft: '8px',
       });
       wrapper.appendChild(btn);
 
@@ -353,7 +352,7 @@
       const wrapper = document.createElement('div');
       Object.assign(wrapper.style, {
         display: 'inline-block',
-        marginLeft: '8px'
+        marginLeft: '8px',
       });
       wrapper.appendChild(btn);
 
@@ -366,7 +365,7 @@
     if (actions) {
       const wrapper = document.createElement('div');
       Object.assign(wrapper.style, {
-        marginTop: '12px'
+        marginTop: '12px',
       });
       wrapper.appendChild(btn);
       actions.appendChild(wrapper);
@@ -378,7 +377,7 @@
       position: 'fixed',
       top: '100px',
       right: '20px',
-      zIndex: '99999'
+      zIndex: '99999',
     });
     document.body.appendChild(btn);
     warn('Кнопка вставлена как fixed fallback — стоит проверить более устойчивый контейнер.');
@@ -388,30 +387,16 @@
   function fillForm(data) {
     const loanIdFromUrl = getLoanIdFromUrl();
 
-    const dateOk = setVal(
-      [
-        'input[aria-label="Дата платежа"]',
-        'input[name$="[incomeDate]"]'
-      ],
-      data.incomeDate
-    );
+    const dateOk = setVal(['input[aria-label="Дата платежа"]', 'input[name$="[incomeDate]"]'], data.incomeDate);
 
     const orderOk = setVal(
-      [
-        'input[aria-label="Номер заказа*"]',
-        'input[name$="[bankPaymentId]"]',
-        'input[name*="[orderNumber]"]'
-      ],
-      data.orderNumber || '-'
+      ['input[aria-label="Номер заказа*"]', 'input[name$="[bankPaymentId]"]', 'input[name*="[orderNumber]"]'],
+      data.orderNumber || '-',
     );
 
     const amountOk = setVal(
-      [
-        'input[aria-label="Сумма платежа*"]',
-        'input[name$="[income]"]',
-        'input[name*="[amount]"]'
-      ],
-      data.amount
+      ['input[aria-label="Сумма платежа*"]', 'input[name$="[income]"]', 'input[name*="[amount]"]'],
+      data.amount,
     );
 
     // Считаем успехом только если заполнены оба критичных поля: дата и сумма.
@@ -424,9 +409,9 @@
         `Дата: ${dateOk ? 'OK' : 'нет'}`,
         `Номер заказа: ${orderOk ? 'OK' : 'нет'}`,
         `Сумма: ${amountOk ? 'OK' : 'нет'}`,
-        `ID займа: ${loanIdFromUrl || 'из URL не определён'}`
+        `ID займа: ${loanIdFromUrl || 'из URL не определён'}`,
       ].join(' '),
-      { type: success ? 'success' : 'error', durationMs: 5000 }
+      { type: success ? 'success' : 'error', durationMs: 5000 },
     );
 
     log('Заполнено:', { data, loanIdFromUrl, dateOk, orderOk, amountOk, success });
@@ -517,10 +502,14 @@
     bootstrap().catch((error) => warn('bootstrap error:', error));
   });
 
-  window.addEventListener('pagehide', () => {
-    cleanup();
-    stopUrlWatcher();
-  }, { once: true });
+  window.addEventListener(
+    'pagehide',
+    () => {
+      cleanup();
+      stopUrlWatcher();
+    },
+    { once: true },
+  );
 
   (async () => {
     await migrateLegacyStorage();

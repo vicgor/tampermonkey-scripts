@@ -41,10 +41,10 @@
     ruMonthNumber,
   } = window.__AGIS_CORE__;
 
-  const SCRIPT_NS    = 'agis:duplicate-income';
-  const DOM_NS       = 'agis-duplicate-income'; // без двоеточия — для CSS/id, если понадобятся
-  const STORAGE_KEY  = 'agis:duplicate-income:payload:v1';
-  const DEBUG_KEY    = 'agis:duplicate-income:debug';
+  const SCRIPT_NS = 'agis:duplicate-income';
+  const DOM_NS = 'agis-duplicate-income'; // без двоеточия — для CSS/id, если понадобятся
+  const STORAGE_KEY = 'agis:duplicate-income:payload:v1';
+  const DEBUG_KEY = 'agis:duplicate-income:debug';
   const WAIT_TIMEOUT = 15000;
 
   // registerDebugToggle асинхронный — debugCtl.value равен false, пока не резолвится.
@@ -52,7 +52,9 @@
   // иначе на этой странице log() внутри initCreatePage/initListPage успевал
   // выполниться раньше, чем debugCtl обновлялся, и debug-логи не появлялись вовсе.
   let debugCtl = { value: false };
-  const log  = (...a) => { if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a); };
+  const log = (...a) => {
+    if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a);
+  };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
 
   const routeTokenController = createRouteTokenController();
@@ -75,37 +77,39 @@
         await storageDelete('debug_dup');
         log('Миграция storage: debug флаг перенесён');
       }
-    } catch (e) { warn('Миграция storage не удалась:', e); }
+    } catch (e) {
+      warn('Миграция storage не удалась:', e);
+    }
   }
 
   // Маппинг шлюзов: ключ — что приходит из ячейки AGIS, значение — что подставить в select формы.
   // Поиск регистронезависимый — см. resolveGateway()
   const GATEWAY_MAP = {
-    'euroalliance':     'Евроальянс',
-    'евроальянс':     'Евроальянс',
-    'mi_euroalliance':  'Евроальянс',
-    'tinkoff':          'Tinkoff',
-    'тинькофф':          'Tinkoff',
-    'mi_tinkoff':       'Tinkoff',
-    'alfa':             'Альфа-Банк',
-    'альфа-банк':     'Альфа-Банк',
-    'qiwi':             'Qiwi',
-    'почта россии':    'Почта России',
-    'mi_russianpost':   'Почта России',
-    'korona':           'Korona',
-    'contact':          'Contact',
-    'elecsnet':         'Elecsnet',
-    'mi_elecsnet':      'Elecsnet',
-    'finstar':          'СИАБ-Банк',  // AGIS отдаёт латиницей
-    'mi_siab':          'СИАБ-Банк',
-    'сиаб-банк':        'СИАБ-Банк',
-    'ткб банк':          'ТКБ Банк',
-    'твои платежи':   'Твои платежи',
-    'цессия':           'Цессия',
-    'mi_cession':       'Цессия',
+    euroalliance: 'Евроальянс',
+    евроальянс: 'Евроальянс',
+    mi_euroalliance: 'Евроальянс',
+    tinkoff: 'Tinkoff',
+    тинькофф: 'Tinkoff',
+    mi_tinkoff: 'Tinkoff',
+    alfa: 'Альфа-Банк',
+    'альфа-банк': 'Альфа-Банк',
+    qiwi: 'Qiwi',
+    'почта россии': 'Почта России',
+    mi_russianpost: 'Почта России',
+    korona: 'Korona',
+    contact: 'Contact',
+    elecsnet: 'Elecsnet',
+    mi_elecsnet: 'Elecsnet',
+    finstar: 'СИАБ-Банк', // AGIS отдаёт латиницей
+    mi_siab: 'СИАБ-Банк',
+    'сиаб-банк': 'СИАБ-Банк',
+    'ткб банк': 'ТКБ Банк',
+    'твои платежи': 'Твои платежи',
+    цессия: 'Цессия',
+    mi_cession: 'Цессия',
     'возврат продукта': 'Возврат продукта',
-    'mi_refund_product': 'Возврат продукта',
-    'иное':             'Иное',
+    mi_refund_product: 'Возврат продукта',
+    иное: 'Иное',
   };
 
   // Регистронезависимый поиск шлюза в маппинге.
@@ -114,12 +118,18 @@
     return GATEWAY_MAP[raw.toLowerCase()] ?? raw;
   }
 
-  function cellText(td) { return td ? td.textContent.replace(/\s+/g, ' ').trim() : ''; }
+  function cellText(td) {
+    return td ? td.textContent.replace(/\s+/g, ' ').trim() : '';
+  }
 
   function extractTotal(text) {
     const m = text.match(/Итого\s*:?\s*([\d\s.,]+)/i);
     if (!m) return '';
-    return m[1].replace(/\s|\u00a0/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.').replace(/[^\d.]/g, '');
+    return m[1]
+      .replace(/\s|\u00a0/g, '')
+      .replace(/\.(?=\d{3}(\D|$))/g, '')
+      .replace(',', '.')
+      .replace(/[^\d.]/g, '');
   }
 
   function normalizeDate(s) {
@@ -128,7 +138,7 @@
     if (!m) return '';
     const month = ruMonthNumber(m[2]);
     if (!month) return '';
-    const pad = n => String(n).padStart(2, '0');
+    const pad = (n) => String(n).padStart(2, '0');
     return `${m[3]}-${month}-${pad(m[1])} ${pad(m[4])}:${m[5]}:${m[6]}`;
   }
 
@@ -147,11 +157,11 @@
     const colIndex = {};
     headerCells.forEach((th, i) => {
       const t = th.textContent.trim().toLowerCase();
-      if (t.includes('дата'))                       colIndex.date    = i;
-      if (t.includes('платежный шлюз'))             colIndex.gateway = i;
-      if (t === 'платеж' || t.startsWith('платеж'))  colIndex.payment = i;
-      if (t.includes('внешний id'))                 colIndex.extId   = i;
-      if (t.includes('статус'))                       colIndex.status  = i;
+      if (t.includes('дата')) colIndex.date = i;
+      if (t.includes('платежный шлюз')) colIndex.gateway = i;
+      if (t === 'платеж' || t.startsWith('платеж')) colIndex.payment = i;
+      if (t.includes('внешний id')) colIndex.extId = i;
+      if (t.includes('статус')) colIndex.status = i;
     });
     log('Колонки:', colIndex);
 
@@ -165,8 +175,8 @@
     document.head.appendChild(style);
 
     const rows = table.querySelectorAll('tbody tr');
-    rows.forEach(tr => {
-      const statusCell  = colIndex.status !== undefined ? tr.children[colIndex.status] : null;
+    rows.forEach((tr) => {
+      const statusCell = colIndex.status !== undefined ? tr.children[colIndex.status] : null;
       const isCancelled = cellText(statusCell) === 'Отменен';
 
       tr.classList.add('cs-dup-row');
@@ -178,12 +188,12 @@
         e.preventDefault();
         const cells = tr.children;
         const payload = {
-          date:        cellText(cells[colIndex.date]),
-          gateway:     cellText(cells[colIndex.gateway]),
+          date: cellText(cells[colIndex.date]),
+          gateway: cellText(cells[colIndex.gateway]),
           paymentText: cellText(cells[colIndex.payment]),
-          extId:       cellText(cells[colIndex.extId]),
+          extId: cellText(cells[colIndex.extId]),
         };
-        payload.amount         = extractTotal(payload.paymentText);
+        payload.amount = extractTotal(payload.paymentText);
         payload.dateNormalized = normalizeDate(payload.date);
         log('Пайлоад:', payload);
         await storageSet(STORAGE_KEY, JSON.stringify(payload));
@@ -200,10 +210,19 @@
     if (!raw) return;
 
     let data;
-    try { data = JSON.parse(raw); } catch (e) { warn('Неверный payload:', e); return; }
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      warn('Неверный payload:', e);
+      return;
+    }
 
-    try { await waitForElement('input[name$="[incomeDate]"]', { timeout: 10000 }); }
-    catch (e) { warn('Форма не появилась:', e.message); return; }
+    try {
+      await waitForElement('input[name$="[incomeDate]"]', { timeout: 10000 });
+    } catch (e) {
+      warn('Форма не появилась:', e.message);
+      return;
+    }
     if (!routeTokenController.isCurrent(token)) return;
 
     fillForm(data);
@@ -220,27 +239,31 @@
       const el = document.querySelector(sel);
       if (!el) return;
       const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
-      if (setter) setter.call(el, val); else el.value = val;
-      el.dispatchEvent(new Event('input',  { bubbles: true }));
+      if (setter) setter.call(el, val);
+      else el.value = val;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
       el.dispatchEvent(new Event('change', { bubbles: true }));
       if (window.jQuery) window.jQuery(el).trigger('change');
     };
 
-    setVal('input[name$="[incomeDate]"]',   data.dateNormalized);
+    setVal('input[name$="[incomeDate]"]', data.dateNormalized);
     setVal('input[name$="[bankPaymentId]"]', data.extId);
-    setVal('input[name$="[income]"]',        data.amount);
+    setVal('input[name$="[income]"]', data.amount);
 
     const sel = document.querySelector('select[name$="[manualIncomeType]"]');
     if (sel && data.gateway) {
       // resolveGateway даёт нормализованное название, потом ищем опцию в select
-      const target  = resolveGateway(data.gateway).toLowerCase();
-      const matched = Array.from(sel.options).find(o => o.text.trim().toLowerCase() === target)
-                   || Array.from(sel.options).find(o => o.text.trim().toLowerCase().includes(target));
+      const target = resolveGateway(data.gateway).toLowerCase();
+      const matched =
+        Array.from(sel.options).find((o) => o.text.trim().toLowerCase() === target) ||
+        Array.from(sel.options).find((o) => o.text.trim().toLowerCase().includes(target));
       if (matched) {
         sel.value = matched.value;
         sel.dispatchEvent(new Event('change', { bubbles: true }));
         if (window.jQuery) window.jQuery(sel).trigger('change');
-      } else { warn('Опция шлюза не найдена:', data.gateway); }
+      } else {
+        warn('Опция шлюза не найдена:', data.gateway);
+      }
     }
 
     showBanner('Поля заполнены. Проверьте и нажмите «Предпросмотр».', { type: 'success', durationMs: 6000 });
@@ -251,7 +274,12 @@
   async function bootstrap() {
     const token = routeTokenController.next();
     cleanupRoute();
-    try { await waitForElement('body'); } catch (e) { warn('body:', e.message); return; }
+    try {
+      await waitForElement('body');
+    } catch (e) {
+      warn('body:', e.message);
+      return;
+    }
     if (!routeTokenController.isCurrent(token)) return;
 
     const path = location.pathname;
@@ -261,10 +289,14 @@
 
   const stopUrlWatcher = onUrlChange(() => bootstrap());
 
-  window.addEventListener('pagehide', () => {
-    cleanup();
-    stopUrlWatcher();
-  }, { once: true });
+  window.addEventListener(
+    'pagehide',
+    () => {
+      cleanup();
+      stopUrlWatcher();
+    },
+    { once: true },
+  );
 
   // Миграция ДОЛЖНА завершиться до первого bootstrap: initCreatePage() читает
   // STORAGE_KEY, и если миграция ещё не перенесла туда legacy payload

@@ -40,7 +40,7 @@
 
   // --- Настройки ---
   const SCRIPT_NS = 'agis:rusupport';
-  const KEYWORD   = 'RUSUPPORT';
+  const KEYWORD = 'RUSUPPORT';
   const CONTENT_SELECTOR = [
     'textarea[id$="content"][name$="content"]',
     '[id^="sonata-ba-field-container-"][id$="content"] textarea',
@@ -52,9 +52,9 @@
   const TARGET_PATH_RE = /\/admin\/[^/]*\/?[^/]*\/?loan[^/]*\/[^/]+\/loannote\/create\/?$/i;
 
   const AUTO_INSERT_DELAY = 300;
-  const WAIT_TIMEOUT      = 20000;
+  const WAIT_TIMEOUT = 20000;
 
-  const DEBUG_KEY     = `${SCRIPT_NS}:debug`;
+  const DEBUG_KEY = `${SCRIPT_NS}:debug`;
   const DEBUG_KEY_OLD = 'debug_rusupport';
 
   // registerDebugToggle асинхронный — debugCtl.value равен false, пока не резолвится.
@@ -63,7 +63,9 @@
   // выполниться раньше, чем резолвится debugCtl, и debug-логи не появились бы вовсе
   // (см. agis-duplicate-income.user.js, где эта гонка реально проявилась).
   let debugCtl = { value: false };
-  const log  = (...a) => { if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a); };
+  const log = (...a) => {
+    if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a);
+  };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
 
   // Разовая миграция плоского ключа 'debug_rusupport' (v1.x / v2.0.0) в namespace.
@@ -89,10 +91,17 @@
   // и extra-observer'а. В отличие от observers/timers ядра, это реально дренируется
   // на каждом SPA-переходе (cleanupRoute() ядра чистит только своё).
   const cleanupFns = [];
-  function addCleanup(fn) { cleanupFns.push(fn); return fn; }
+  function addCleanup(fn) {
+    cleanupFns.push(fn);
+    return fn;
+  }
   function runExtraCleanup() {
     for (const fn of cleanupFns.splice(0)) {
-      try { fn(); } catch (err) { warn('Ошибка cleanup:', err); }
+      try {
+        fn();
+      } catch (err) {
+        warn('Ошибка cleanup:', err);
+      }
     }
   }
 
@@ -130,7 +139,7 @@
   }
 
   function dispatchFormEvents(textarea) {
-    textarea.dispatchEvent(new Event('input',  { bubbles: true }));
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
     textarea.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
@@ -154,9 +163,7 @@
       return { inserted: false, message: 'Такой текст уже есть в поле.' };
     }
 
-    textarea.value = current.trim()
-      ? `${current.replace(/\s+$/u, '')}\n${normalized}`
-      : normalized;
+    textarea.value = current.trim() ? `${current.replace(/\s+$/u, '')}\n${normalized}` : normalized;
 
     textarea.dataset.rusupportLastHash = hash;
     dispatchFormEvents(textarea);
@@ -177,12 +184,15 @@
   // --- UI ---
   function createUi(textarea) {
     const wrapper = document.createElement('div');
-    const button  = document.createElement('button');
-    const status  = document.createElement('span');
+    const button = document.createElement('button');
+    const status = document.createElement('span');
 
     wrapper.className = 'tm-rusupport-clipboard';
     Object.assign(wrapper.style, {
-      display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      marginTop: '8px',
     });
 
     button.type = 'button';
@@ -198,9 +208,7 @@
 
     const setStatus = (message, type = 'info') => {
       status.textContent = message;
-      status.style.color = type === 'error' ? '#b94a48'
-        : type === 'success' ? '#3c763d'
-        : '#666';
+      status.style.color = type === 'error' ? '#b94a48' : type === 'success' ? '#3c763d' : '#666';
     };
 
     const onClick = async () => {
@@ -246,10 +254,7 @@
       setStatus(result.message, result.inserted ? 'success' : 'info');
     } catch (err) {
       if (!routeTokenController.isCurrent(token)) return;
-      setStatus(
-        'Авточтение буфера заблокировано браузером. Нажмите кнопку ручной вставки.',
-        'info',
-      );
+      setStatus('Авточтение буфера заблокировано браузером. Нажмите кнопку ручной вставки.', 'info');
       log('Авточтение буфера не выполнено:', err.message);
     }
   }
@@ -305,11 +310,15 @@
 
   // Двойной вызов cleanupRoute()/runExtraCleanup() (последний bootstrap() уже мог
   // их вызвать) безопасен — оба идемпотентны: Sets/массив просто оказываются пустыми.
-  window.addEventListener('pagehide', () => {
-    cleanupRoute();
-    runExtraCleanup();
-    stopUrlWatcher();
-  }, { once: true });
+  window.addEventListener(
+    'pagehide',
+    () => {
+      cleanupRoute();
+      runExtraCleanup();
+      stopUrlWatcher();
+    },
+    { once: true },
+  );
 
   (async () => {
     await migrateLegacyDebugKey();
