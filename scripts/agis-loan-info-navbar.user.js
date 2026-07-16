@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      5.3
+// @version      5.3.1
 // @description  Полноширинная строка под навбаром с информацией о займе и цветным статусом
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*
@@ -72,7 +72,7 @@
     let lastRenderSignature = '';
 
     // Ссылка на функцию отключения единственного table-observerа, чтобы чистить при cleanupRoute.
-    // Не входит в общий observers ядра (см. core-template.user.js, паттерн stopExtraObserver).
+    // Не входит в общий observers ядра (см. templates/example-consumer.user.js, паттерн stopExtraObserver).
     let stopTableObserver = null;
 
     const STATUS_RED = new Set([

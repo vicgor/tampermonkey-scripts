@@ -8,13 +8,12 @@
 
 | Файл | Роль | Нельзя |
 |---|---|---|
-| `core-template.user.js` | **Канон**. Единый источник инфраструктурного API. Все скрипты строятся на нём. | Не упрощать без обновления всех зависимых скриптов |
-| `template-tamper-monkey.md` | **Обучающее пояснение**. Читать прежде написания нового скрипта. | Копировать код из него — брать из `core-template.user.js` |
+| `lib/agis-core.js` | **Канон**. Единственный источник инфраструктурного API. Подключается всеми скриптами через `@require` с версионированным тегом + SRI-хешем. | Менять содержимое существующего тега задним числом — только новый тег + новый хеш |
+| `templates/example-consumer.user.js` | **Живой пример** потребителя `lib/agis-core.js`. Читать/копировать структуру прежде написания нового скрипта. | Копировать код каркаса вручную вместо `@require` |
+| `template-tamper-monkey.md` | **Историческое обучающее пояснение** (до появления `lib/agis-core.js`). | Брать из него код для нового скрипта — устарел |
 | `space-prompt.md` | **Policy-слой**. Правила для AI-ассистента (Perplexity Space). | Редактировать вручную без осознанного PR |
 | `README.md` | **Стандарты**. Требования, чеклист ревью, правила релиза. | Использовать как шаблон |
-| `scripts/*.user.js` | **Production скрипты**. Используют API каркаса и предметную логику. | Реимплементировать инфраструктуру вручную |
-
-> **Правило.** В случае конфликта между `core-template.user.js` и `template-tamper-monkey.md` — прав канонический `core-template.user.js`.
+| `scripts/*.user.js` | **Production скрипты**. `@require`'ят `lib/agis-core.js`, содержат только предметную логику. | Реимплементировать инфраструктуру вручную |
 
 ---
 
@@ -22,8 +21,11 @@
 
 ```
 tampermonkey-scripts/
-├── core-template.user.js   # Базовый каркас — основа всех скриптов
-├── template-tamper-monkey.md  # Обучающее пояснение к каркасу
+├── lib/
+│   └── agis-core.js        # Общее ядро — @require с SRI-хешем во всех скриптах
+├── templates/
+│   └── example-consumer.user.js  # Живой пример потребителя ядра
+├── template-tamper-monkey.md  # Историческое обучающее пояснение
 ├── space-prompt.md         # Policy-слой: правила AI-ассистента
 ├── README.md               # Стандарты и чеклист ревью
 └── scripts/                # Production-скрипты
@@ -109,7 +111,7 @@ tampermonkey-scripts/
 - [ ] Работа с DOM идёт через `waitForElement()`, а не прямым доступом `document.querySelector` в старт
 - [ ] Нет `setInterval`/`setTimeout`-поллинга вместо `MutationObserver`
 - [ ] `MutationObserver` навешен на конкретный root (например, `document.body`), не на `window`
-- [ ] Нет локальных копий `waitForElement` / `observeTableChanges` — используется API из `core-template.user.js`
+- [ ] Нет локальных копий `waitForElement` / `onUrlChange` / `storageGet` и т.д. — используется `window.__AGIS_CORE__` из `lib/agis-core.js` (`@require` + SRI-хеш)
 
 ### SPA и lifecycle
 
@@ -159,34 +161,56 @@ tampermonkey-scripts/
 
 ---
 
-## core-template.user.js — базовый каркас
+## lib/agis-core.js — общее ядро
 
-Устойчивое ядро для любого юзерскрипта. Учитывает известные баги и
-ограничения Tampermonkey: задержки инъекции в Manifest V3, жёсткий CSP,
-асинхронность GM_*-функций, динамический DOM, SPA-навигацию.
+Устойчивое ядро для любого userscript'а, подключаемое через `@require` с
+версионированным git-тегом + SRI-хешем (`#sha256=...`), не копированием кода.
+Учитывает известные баги и ограничения Tampermonkey: задержки инъекции в
+Manifest V3, жёсткий CSP, асинхронность GM_*-функций, динамический DOM,
+SPA-навигацию.
+
+```javascript
+// @require https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.2.0/lib/agis-core.js#sha256=...
+```
+
+```javascript
+if (!window.__AGIS_CORE__) {
+  console.error('[my-script] agis-core.js не загружен (@require не сработал)');
+  return;
+}
+const { waitForElement, onUrlChange, api, showBanner } = window.__AGIS_CORE__;
+```
 
 ### Что внутри
 
-| Функция | Назначение |
-|---|---|
-| `waitForElement(selector, opts)` | Ждёт появления элемента через MutationObserver с таймаутом |
-| `observeAddedElements(selector, cb)` | Вызывает callback для каждого нового подходящего элемента |
-| `onDomReady(callback)` | Безопасный аналог DOMContentLoaded, работает с document-start |
-| `storageGet(key, fallback)` | GM_getValue с try/catch и fallback |
-| `storageSetDebounced(key, wait?)` | Фабрика: возвращает `(value) => void` с debounce-записью в GM_setValue |
-| `httpRequest(opts)` | Промис поверх GM_xmlhttpRequest |
-| `api.getJson(url, headers)` | GET-запрос, обходит CSP сайта |
-| `api.postJson(url, body, headers)` | POST-запрос, обходит CSP сайта |
-| `onUrlChange(callback)` | Ловит SPA-навигацию через pushState/replaceState/popstate/hashchange |
-| `cleanupRoute()` | Очищает все таймеры и MutationObserver-ы при смене маршрута |
+| Функция | Назначение | Требует `@grant` |
+|---|---|---|
+| `waitForElement(selector, opts)` | Ждёт появления элемента через MutationObserver с таймаутом | — |
+| `observeAddedElements(selector, cb, opts)` | Вызывает callback для каждого нового подходящего элемента | — |
+| `debounce(fn, wait)` | Стандартный debounce с `.cancel()` | — |
+| `cleanupRoute()` | Очищает observer'ы/таймеры `waitForElement` текущего маршрута | — |
+| `cleanup()` | `cleanupRoute()` + чистит storage- и UI-таймеры (для `pagehide`) | — |
+| `onUrlChange(callback)` | Ловит SPA-навигацию (`pushState`/`replaceState`/`popstate`/`hashchange`), возвращает `stopFn`. Вызывать один раз за жизнь страницы | — |
+| `createRouteTokenController()` | `{ next(), isCurrent(token) }` вместо ручного `let routeToken = 0` | — |
+| `showBanner(text, { type, durationMs })` | Баннер в углу экрана, `type`: `success`/`error`/`info` | — |
+| `storageGet(key, fallback)` | `GM_getValue` с try/catch и fallback | `GM_getValue` |
+| `storageSet(key, value)` | Немедленная (не debounced) запись — когда нужно записать перед навигацией | `GM_setValue` |
+| `storageSetDebounced(key, value, wait?)` | Debounced-запись в `GM_setValue` (прямой вызов, не фабрика) | `GM_setValue` |
+| `storageDelete(key)` | `GM_deleteValue` с try/catch | `GM_deleteValue` |
+| `httpRequest(opts)` | Промис поверх `GM_xmlhttpRequest` | `GM_xmlhttpRequest` |
+| `api.getJson(url, headers)` / `api.postJson(url, body, headers)` / `api.getHtml(url, headers)` | Запросы через `httpRequest`, обходят CSP сайта | `GM_xmlhttpRequest` |
+| `registerDebugToggle(scriptNs, debugKey)` | Регистрирует пункт меню Tampermonkey для debug-логов, возвращает `{ value }` (async, резолвится после чтения хранилища) | `GM_getValue`, `GM_setValue`, `GM_registerMenuCommand` |
+| `ruMonthNumber(rawMonthText)` | Парсит русское название месяца → `'01'..'12'` | — |
 
 ### Ключевые правила при адаптации
 
-- Замени `@match`, `@connect` и `@icon` на реальный домен.
-- Основную логику пиши внутри `bootstrap()`.
-- Для SPA добавь переинициализацию логики в `onUrlChange()`.
-- Если нужен `unsafeWindow` — добавь `@grant unsafeWindow` и изменить `@sandbox`, объяснив зачем.
-- Не использовать `fetch()`/`XHR` на CSP-защищённых сайтах — использовать `api.getJson()` / `api.postJson()`.
+- Смотри `templates/example-consumer.user.js` — живой пример со всей структурой ниже.
+- Замени `@match`, `@connect` и `@icon` на реальный домен; `@require` — на актуальный тег ядра (`git tag -l`).
+- Основную логику пиши внутри `bootstrap()`, с `createRouteTokenController()` и проверкой `isCurrent(token)` после каждого `await`.
+- `registerDebugToggle()` — асинхронный; дожидайся его перед первым `bootstrap()` (не fire-and-forget), иначе ранние `log()`-вызовы могут не напечататься даже при включённом debug.
+- `onUrlChange()` устанавливай синхронно, до всех `await` — SPA-watcher не должен ждать миграцию storage или регистрацию debug-toggle.
+- Если нужен `unsafeWindow` — добавь `@grant unsafeWindow` и измени `@sandbox`, объяснив зачем.
+- Не использовать `fetch()`/`XHR` на CSP-защищённых сайтах — использовать `api.getJson()` / `api.postJson()` / `api.getHtml()`.
 
 ---
 
@@ -203,6 +227,7 @@ tampermonkey-scripts/
 // @description  Серый цвет для статей старше 7 дней на news.example.com
 // @match        https://news.example.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=news.example.com
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.2.0/lib/agis-core.js#sha256=...
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_setValue
@@ -212,11 +237,14 @@ tampermonkey-scripts/
 (() => {
   'use strict';
 
-  // Вставить сюда весь код из core-template.user.js
+  if (!window.__AGIS_CORE__) {
+    console.error('[news-old-articles] agis-core.js не загружен (@require не сработал)');
+    return;
+  }
+  const { storageGet, storageSetDebounced, observeAddedElements, onUrlChange } = window.__AGIS_CORE__;
 
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
   let processedCount = 0;
-  const saveCount = storageSetDebounced('processedCount', 800);
 
   const processArticle = (el) => {
     const dateStr = el.querySelector('time')?.getAttribute('datetime');
@@ -226,30 +254,29 @@ tampermonkey-scripts/
     if (Date.now() - published.getTime() > SEVEN_DAYS_MS) {
       el.style.opacity = '0.45';
       processedCount++;
-      saveCount(processedCount);
+      storageSetDebounced('processedCount', processedCount, 800);
     }
   };
 
   async function bootstrap() {
     processedCount = await storageGet('processedCount', 0);
-    onDomReady(() => {
-      observeAddedElements('article.news-item', processArticle);
-      onUrlChange(() => {/* SPA: observer продолжает работать */});
-    });
+    observeAddedElements('article.news-item', processArticle);
   }
 
+  onUrlChange(() => {/* SPA: observer продолжает работать, доп. переинициализация не нужна */});
   bootstrap();
 })();
 ```
 
-### Что изменилось по сравнению с каркасом
+### Что изменилось по сравнению с шаблоном
 
 | Изменение | Зачем |
 |---|---|
 | `@match https://news.example.com/*` | Ограничили сайт |
 | Убраны `GM_xmlhttpRequest` и `@connect` | Запросы не нужны |
 | `observeAddedElements('article.news-item', ...)` | Ловим все новые карточки |
-| `const saveCount = storageSetDebounced('processedCount', 800)` | Фабрика debounced-записи счётчика |
+| `storageSetDebounced('processedCount', processedCount, 800)` | Прямой вызов (ядро v1.1.0+, не фабрика) — debounced-запись счётчика |
+| Нет `createRouteTokenController()` | Здесь одна страница без нескольких `await` подряд — токен не нужен. Для SPA с несколькими последовательными `await` в `bootstrap()` (типичный случай AGIS-скриптов) — используй его, см. `templates/example-consumer.user.js` |
 
 ---
 

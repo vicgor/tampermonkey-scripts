@@ -18,29 +18,39 @@ smoke-test в браузере (см. ниже) и чтение кода, т.к.
 
 | Файл | Роль |
 |---|---|
-| `core-template.user.js` | **Канон**. Эталонный каркас: `waitForElement`, `observeAddedElements`, `storageGet`/`storageSetDebounced`, `httpRequest`/`api.getJson`/`api.postJson`/`api.getHtml`, `onUrlChange`, `routeToken`, `cleanupRoute`/`cleanup`. Все новые скрипты пишутся на основе его API. |
-| `template-tamper-monkey.md` | Обучающее объяснение более старой/упрощённой версии каркаса — читать для контекста, но код брать только из `core-template.user.js`. |
+| `lib/agis-core.js` | **Канон**. Единственный источник инфраструктурного API: `waitForElement`, `observeAddedElements`, `debounce`, `cleanupRoute`/`cleanup`, `storageGet`/`storageSet`/`storageSetDebounced`/`storageDelete`, `httpRequest`/`api.getJson`/`api.postJson`/`api.getHtml`, `onUrlChange`, `createRouteTokenController`, `showBanner`, `registerDebugToggle`, `ruMonthNumber`. Подключается всеми `scripts/*.user.js` через `@require` с версионированным git-тегом + SRI-хешем (`#sha256=...`), не копируется вручную. |
+| `templates/example-consumer.user.js` | Живой пример потребителя `lib/agis-core.js` — минимальный скрипт, показывающий структуру `bootstrap()`, `routeTokenController`, кэш+бэкенд-фолбэк, debug-toggle. Копировать структуру, а не переносить код каркаса вручную. |
+| `template-tamper-monkey.md` | Обучающее объяснение более старой/упрощённой версии каркаса (до появления `lib/agis-core.js`) — читать только для исторического контекста, код брать из `templates/example-consumer.user.js`. |
 | `space-prompt.md` | System-prompt для AI-ассистента (Perplexity Space), который генерирует/правит эти скрипты вне Claude Code. |
-| `README.md` | Нормативный документ: требования к метаблоку, чеклист code review, правила версионирования, smoke-test. Это источник правды по стандартам. |
-| `ROADMAP.md` | Разрыв между каждым production-скриптом и каноном (в процентах) + план из 5 волн по унификации. Полезно перед рефакторингом, но таблица **устаревает быстро** — например `linkify-loan-note` и `rusupport-clipboard` в ней всё ещё числятся на старых версиях (2.10/40%, 1.0.0/50%), хотя уже переписаны на канон (см. `@version` в самом файле и git log). Сверяйся с реальным `@version` файла, а не только с таблицей. |
-| `scripts/*.user.js` | Production-скрипты. |
+| `README.md` | Нормативный документ: требования к метаблоку, чеклист code review, правила версионирования, smoke-test, описание API `lib/agis-core.js`. Это источник правды по стандартам. |
+| `ROADMAP.md` | План унификации из волн; Волны 1–3 завершены (общее ядро реально `@require`'ится всеми 7 скриптами, UX/конфиг унифицированы). Волна 4 (lint/CI) и Волна 5 (TS/тесты) ещё не начаты. Таблица версий скриптов **может устаревать быстрее, чем этот файл** — сверяйся с реальным `@version` в самом скрипте и `git tag -l` для тегов ядра. |
+| `scripts/*.user.js` | Production-скрипты, все 7 переведены на `lib/agis-core.js`. |
 
-**При конфликте между `core-template.user.js` и `template-tamper-monkey.md` побеждает `core-template.user.js`.**
+## Как реально устроено переиспользование кода
 
-## Важный архитектурный факт: нет реального переиспользования кода
+`lib/agis-core.js` подключается через `@require` с точной версией тега +
+SRI-хешем, например:
+```
+// @require https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.2.0/lib/agis-core.js#sha256=...
+```
+Каждый `@require`'ящий скрипт получает свой собственный экземпляр состояния ядра
+(observers/timers) — IIFE ядра выполняется отдельно в сендбоксе каждого скрипта.
+Исключение — `onUrlChange`: `history.pushState`/`replaceState` общий на всю
+страницу, поэтому патч ставится один раз через хаб-объект на `history`, а не
+дублируется при каждом `@require`.
 
-`core-template.user.js` **не подключается через `@require`** — Tampermonkey-скрипты
-здесь не поддерживают общий импортируемый модуль (см. ROADMAP, Волна 2, ещё не сделана).
-Поэтому каждый скрипт в `scripts/` **копирует и адаптирует** нужные функции каркаса
-вручную, и на практике версии этих функций успели разойтись (свои `waitForElement`,
-свой `debounce`, `setInterval`-поллинг вместо `MutationObserver` и т.д. — см. таблицу
-соответствия в `ROADMAP.md`). Когда правишь существующий скрипт или пишешь новый:
+Когда правишь существующий скрипт или пишешь новый:
 
-- Бери актуальную реализацию функций из `core-template.user.js`, а не из другого
-  скрипта в `scripts/` — они могут быть устаревшей копией.
-- `agis-loan-info-navbar.user.js` (v4.7) — текущий эталон соответствия канону.
-- Не вводи ещё одну независимую копию `waitForElement`/`onUrlChange` — это ровно та
-  проблема, которую чинит ROADMAP.
+- Бери функции из `window.__AGIS_CORE__` (после `@require`), а не копируй код
+  каркаса вручную и не бери реализацию из другого скрипта в `scripts/` — они
+  могут отличаться версией тега.
+- Актуальный тег ядра — смотри `git tag -l` (сортировка по SemVer) или
+  `@require`-строку в любом недавно мигрированном скрипте.
+- Новая версия ядра публикуется новым git-тегом + новым SRI-хешем; существующие
+  теги (`v1.0.0`, `v1.1.0`, ...) не меняются задним числом — иначе SRI-проверка
+  у уже установленных скриптов молча упадёт.
+- Не вводи независимую копию `waitForElement`/`onUrlChange`/`storageGet` и т.д. —
+  это ровно та проблема, которую чинила Волна 2 (см. `ROADMAP.md`).
 
 ## Обязательный метаблок каждого `*.user.js`
 
@@ -52,7 +62,7 @@ smoke-test в браузере (см. ниже) и чтение кода, т.к.
 `@sandbox` (`DOM` по умолчанию; `JavaScript`/`raw` только с явным комментарием, зачем
 нужен `unsafeWindow`).
 
-## Ключевые инварианты каркаса (см. `core-template.user.js` для реализации)
+## Ключевые инварианты каркаса (см. `lib/agis-core.js` для реализации)
 
 - Работа с DOM всегда через `waitForElement()` / `observeAddedElements()` —
   никогда `setInterval`-поллинг и никогда прямой `document.querySelector` в момент
@@ -62,10 +72,11 @@ smoke-test в браузере (см. ниже) и чтение кода, т.к.
 - SPA-навигация ловится через `onUrlChange()` (перехват `pushState`/`replaceState`
   + `popstate`/`hashchange`), вызывается **ровно один раз** за жизнь страницы.
   `cleanupRoute()` вызывается первым действием в каждом `bootstrap()`.
-- `routeToken` инкрементируется на каждый route-переход; проверяется `token !==
-  routeToken` после каждого `await` (после `waitForElement`, после парсинга,
-  после `storageGet`, после сетевого запроса) — иначе можно отрендерить данные
-  устаревшего маршрута после SPA-перехода.
+- `createRouteTokenController()` (из ядра) — `.next()` вызывается первым
+  действием в `bootstrap()`, `.isCurrent(token)` проверяется после каждого
+  `await` (после `waitForElement`, после парсинга, после `storageGet`, после
+  сетевого запроса) — иначе можно отрендерить данные устаревшего маршрута
+  после SPA-перехода.
 - `pagehide` вызывает `cleanup()` (все таймеры + все observer'ы) и стоп-функцию
   `onUrlChange`.
 - `GM_getValue`/`GM_setValue` — асинхронные, всегда `await` + `try/catch`
