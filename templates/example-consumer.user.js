@@ -6,7 +6,7 @@
 // @author       me
 // @match        https://example.com/path/*    // <- заменить на реальный домен
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=example.com
-// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.2.0/lib/agis-core.js#sha256=dV8YKJZ5amc3KVhAYRg7WBQV/dUGFM4UwLKXLN8RZRg=
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.2.0/lib/agis-core.js#sha256=dV8YKJZ5amc3KVhAYRg7WBQV/dUGFM4UwLKXLN8RZRg=  // <- ОБНОВИТЬ тег и sha256 на актуальные (git tag -l) перед использованием этого шаблона
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_setValue
@@ -91,6 +91,9 @@
   //   4. после сетевого запроса (GM_xmlhttpRequest) — самый долгий await
   async function bootstrap(reason = 'start') {
     const token = routeTokenController.next();
+    // Отключаем extra-observer предыдущего маршрута — cleanupRoute() ядра его не
+    // трогает (он не входит в общий observers Set, владение только через stopFn).
+    if (stopExtraObserver) { stopExtraObserver(); stopExtraObserver = null; }
     cleanupRoute(); // всегда первым действием
     log('Инициализация:', reason);
 

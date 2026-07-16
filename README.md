@@ -276,6 +276,7 @@ const { waitForElement, onUrlChange, api, showBanner } = window.__AGIS_CORE__;
 | Убраны `GM_xmlhttpRequest` и `@connect` | Запросы не нужны |
 | `observeAddedElements('article.news-item', ...)` | Ловим все новые карточки |
 | `storageSetDebounced('processedCount', processedCount, 800)` | Прямой вызов (ядро v1.1.0+, не фабрика) — debounced-запись счётчика |
+| Нет `createRouteTokenController()` | Здесь одна страница без нескольких `await` подряд — токен не нужен. Для SPA с несколькими последовательными `await` в `bootstrap()` (типичный случай AGIS-скриптов) — используй его, см. `templates/example-consumer.user.js` |
 
 ---
 
