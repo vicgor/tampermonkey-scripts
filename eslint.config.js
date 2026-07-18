@@ -33,6 +33,11 @@ module.exports = [
     plugins: { userscripts },
     languageOptions: {
       ecmaVersion: 2022,
+      // 'script', не 'module': Tampermonkey @require грузит и выполняет классический
+      // скрипт, ESM (import/export) не поддерживает — это архитектурно, не наш выбор,
+      // так что менять не придётся. Если в Волне 5 появятся vitest-тесты на Node ESM —
+      // им нужен отдельный блок конфига с sourceType: 'module', ограниченный
+      // files: ['**/*.test.js'], а не правка этого блока.
       sourceType: 'script',
       globals: {
         ...globals.browser,
