@@ -12,9 +12,12 @@ creditsmile, belkacredit, volgazaim, berrycash, moneymania, credit7, credit365).
 
 Есть `package.json` для ESLint + Prettier (`npm install`, затем `npm run lint` /
 `npm run format`) — только для качества кода, не для сборки: скрипты по-прежнему
-ставятся в Tampermonkey как есть, без бандлинга. Нет build/test команд —
-запускать userscript можно только внутри Tampermonkey в реальном браузере,
-проверка изменений — ручной smoke-test (см. ниже) и чтение кода.
+ставятся в Tampermonkey как есть, без бандлинга. `.github/workflows/ci.yml`
+гоняет `npm run lint` и `npm run format:check` на каждый PR и push в `main` —
+если CI зелёный, повторно гонять линтер вручную перед мержем не нужно. Нет
+build/test команд — запускать userscript можно только внутри Tampermonkey в
+реальном браузере, проверка изменений — ручной smoke-test (см. ниже) и чтение
+кода.
 
 ## Роли файлов (важно понимать перед правкой)
 
@@ -25,7 +28,7 @@ creditsmile, belkacredit, volgazaim, berrycash, moneymania, credit7, credit365).
 | `template-tamper-monkey.md` | Обучающее объяснение более старой/упрощённой версии каркаса (до появления `lib/agis-core.js`) — читать только для исторического контекста, код брать из `templates/example-consumer.user.js`. |
 | `space-prompt.md` | System-prompt для AI-ассистента (Perplexity Space), который генерирует/правит эти скрипты вне Claude Code. |
 | `README.md` | Нормативный документ: требования к метаблоку, чеклист code review, правила версионирования, smoke-test, описание API `lib/agis-core.js`. Это источник правды по стандартам. |
-| `ROADMAP.md` | План унификации из волн; Волны 1–3 завершены (общее ядро реально `@require`'ится всеми 7 скриптами, UX/конфиг унифицированы). Волна 4 (lint/CI) и Волна 5 (TS/тесты) ещё не начаты. Таблица версий скриптов **может устаревать быстрее, чем этот файл** — сверяйся с реальным `@version` в самом скрипте и `git tag -l` для тегов ядра. |
+| `ROADMAP.md` | План унификации из волн; Волны 1–3 завершены (общее ядро реально `@require`'ится всеми 7 скриптами, UX/конфиг унифицированы), Волна 4.1–4.4 завершены (ESLint, Prettier, GitHub Actions CI, инсталлятор в README). Не начаты: 4.5 (метаблок-валидатор), `release.yml`, Волна 5 (TS/тесты). Таблица версий скриптов **может устаревать быстрее, чем этот файл** — сверяйся с реальным `@version` в самом скрипте и `git tag -l` для тегов ядра. |
 | `scripts/*.user.js` | Production-скрипты, все 7 переведены на `lib/agis-core.js`. |
 
 ## Как реально устроено переиспользование кода
@@ -83,7 +86,10 @@ SRI-хешем, например:
   `onUrlChange`.
 - `GM_getValue`/`GM_setValue` — асинхронные, всегда `await` + `try/catch`
   (`storageGet`), частые записи — только через debounce (`storageSetDebounced`).
-  Ключи кэша должны включать версию (`CACHE_VERSION`) на случай смены формата.
+  Ключи кэша должны включать версию на случай смены формата — либо через
+  отдельную константу `CACHE_VERSION` (нужна, когда ключ строится динамически,
+  как в `agis-loan-info-navbar.user.js`), либо суффиксом прямо в статической
+  строке (`agis:duplicate-income:payload:v1` и т.п., большинство скриптов).
 - Сетевые запросы к другим доменам/в обход CSP — только `GM_xmlhttpRequest`
   (`httpRequest`/`api.getJson`/`api.postJson`), не `fetch()`/`XHR` страницы.
 - Никаких `innerHTML` с непроверенными данными (`textContent`/DOM API вместо),
