@@ -9,6 +9,9 @@
     "format:check": "prettier --check \"**/*.js\""
   },
   "license": "ISC",
+  "engines": {
+    "node": ">=20"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.7.0",
