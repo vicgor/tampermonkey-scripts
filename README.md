@@ -335,5 +335,25 @@ const { waitForElement, onUrlChange, api, showBanner } = window.__AGIS_CORE__;
    [Edge](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd)
 2. **Chrome/Edge (MV3):** включите Developer Mode в `chrome://extensions` или
    разрешение «Аллов user scripts» в настройках расширения.
-3. В Tampermonkey Dashboard нажмите «+», вставьте код скрипта, сохраните (`Ctrl+S`).
+3. Откройте install-ссылку нужного скрипта из таблицы ниже — Tampermonkey сам
+   распознает `.user.js` URL и покажет диалог установки (либо вставьте код
+   скрипта вручную в Tampermonkey Dashboard → «+» → `Ctrl+S`).
 4. Откройте нужный сайт, проверьте консоль браузера по префиксу `[SCRIPT_NAME]`.
+
+---
+
+## Установка скриптов
+
+Все скрипты покрывают все 7 брендов AGIS (см. таблицу доменов выше) — один
+install на скрипт достаточен независимо от бренда. Ссылки ведут на `main` —
+Tampermonkey сам предложит обновление при следующем изменении файла.
+
+| Скрипт | Что делает | Установить |
+|---|---|---|
+| `agis-loan-info-navbar` | Полоса под навбаром с информацией о займе и цветным статусом | [Install](https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-loan-info-navbar.user.js) |
+| `agis-duplicate-income` | Клик по строке прихода → форма создания с автозаполнением (дата, шлюз, ID, сумма) | [Install](https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-duplicate-income.user.js) |
+| `agis-add-income-from-googlesheet` | Автозаполнение формы прихода из Google Таблицы (CSV Publish) | [Install](https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-add-income-from-googlesheet.user.js) |
+| `agis-protocol-income-fill` | Перенос данных прихода из протокола поддержки в форму создания | [Install](https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-protocol-income-fill.user.js) |
+| `agis-paste-cleaner-amount` | Очистка вставки в полях суммы (только цифры/точки/запятые) | [Install](https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-paste-cleaner-amount.user.js) |
+| `agis-linkify-loan-note` | Кликабельные ссылки (markdown/голые URL/Jira RUSUPPORT-*) в колонке "Контент" | [Install](https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-linkify-loan-note.user.js) |
+| `agis-rusupport-clipboard` | Вставка текста из буфера в поле "Содержание" заметки, если есть RUSUPPORT | [Install](https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-rusupport-clipboard.user.js) |
