@@ -1,0 +1,20 @@
+{
+  "name": "tampermonkey-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Репозиторий устойчивых Tampermonkey-скриптов с единым базовым ядром (lib/agis-core.js).",
+  "scripts": {
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.js\"",
+    "format:check": "prettier --check \"**/*.js\""
+  },
+  "license": "ISC",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.7.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-userscripts": "^0.5.6",
+    "globals": "^17.7.0",
+    "prettier": "^3.9.5"
+  }
+}

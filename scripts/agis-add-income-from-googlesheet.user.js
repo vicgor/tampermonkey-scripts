@@ -46,9 +46,9 @@
     registerDebugToggle,
   } = window.__AGIS_CORE__;
 
-  const SCRIPT_NS   = 'agis:googlesheet';
+  const SCRIPT_NS = 'agis:googlesheet';
   const STORAGE_KEY = 'agis:googlesheet:sheet-url:v1';
-  const DEBUG_KEY   = 'agis:googlesheet:debug';
+  const DEBUG_KEY = 'agis:googlesheet:debug';
   const FILL_TIMEOUT = 10000;
 
   // registerDebugToggle асинхронный — debugCtl.value равен false, пока не резолвится.
@@ -56,7 +56,9 @@
   // иначе log() внутри handleClick/fillForm мог бы выполниться раньше, чем debugCtl
   // обновится, и debug-логи не появились бы вовсе (см. agis-duplicate-income.user.js).
   let debugCtl = { value: false };
-  const log  = (...a) => { if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a); };
+  const log = (...a) => {
+    if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a);
+  };
   const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
 
   const routeTokenController = createRouteTokenController();
@@ -75,7 +77,9 @@
         await storageDelete('agis_google_sheet_url');
         log('Миграция storage: sheet-url перенесён');
       }
-    } catch (e) { warn('Миграция storage не удалась:', e); }
+    } catch (e) {
+      warn('Миграция storage не удалась:', e);
+    }
   }
 
   // --- Сетевой запрос через GM_xmlhttpRequest (обходит CSP страницы) ---
@@ -92,21 +96,23 @@
   function parseCSV(csvText) {
     const rows = tokenizeCSV(csvText);
     if (rows.length < 2) return {};
-    const headers = rows[0].map(h => h.trim());
+    const headers = rows[0].map((h) => h.trim());
     const out = {};
     for (let i = 1; i < rows.length; i++) {
       const cols = rows[i];
       if (cols.length === 0 || (cols.length === 1 && cols[0] === '')) continue;
       const obj = {};
-      headers.forEach((h, idx) => { obj[h] = (cols[idx] ?? '').trim(); });
+      headers.forEach((h, idx) => {
+        obj[h] = (cols[idx] ?? '').trim();
+      });
       const loanId = obj['loanid'];
       if (!loanId) continue;
       out[loanId] = {
-        order:      '-',
-        sum:        obj['amount'],
-        date:       obj['paramIncomeDate'],
+        order: '-',
+        sum: obj['amount'],
+        date: obj['paramIncomeDate'],
         incomeType: obj['incomeType'],
-        comment:    obj['comment'],
+        comment: obj['comment'],
       };
     }
     return out;
@@ -114,19 +120,42 @@
 
   function tokenizeCSV(text) {
     const rows = [];
-    let row = [], field = '', inQuotes = false, i = 0;
+    let row = [],
+      field = '',
+      inQuotes = false,
+      i = 0;
     text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     while (i < text.length) {
       const ch = text[i];
       if (inQuotes) {
-        if (ch === '"' && text[i + 1] === '"') { field += '"'; i += 2; }
-        else if (ch === '"') { inQuotes = false; i++; }
-        else { field += ch; i++; }
+        if (ch === '"' && text[i + 1] === '"') {
+          field += '"';
+          i += 2;
+        } else if (ch === '"') {
+          inQuotes = false;
+          i++;
+        } else {
+          field += ch;
+          i++;
+        }
       } else {
-        if      (ch === '"')  { inQuotes = true; i++; }
-        else if (ch === ',')  { row.push(field); field = ''; i++; }
-        else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; }
-        else                  { field += ch; i++; }
+        if (ch === '"') {
+          inQuotes = true;
+          i++;
+        } else if (ch === ',') {
+          row.push(field);
+          field = '';
+          i++;
+        } else if (ch === '\n') {
+          row.push(field);
+          rows.push(row);
+          row = [];
+          field = '';
+          i++;
+        } else {
+          field += ch;
+          i++;
+        }
       }
     }
     row.push(field);
@@ -135,7 +164,9 @@
   }
 
   // --- Вспомогательные ---
-  function pad(n) { return n < 10 ? '0' + n : n; }
+  function pad(n) {
+    return n < 10 ? '0' + n : n;
+  }
 
   function toDateTimeString(dateStr) {
     if (!dateStr) return '';
@@ -150,8 +181,10 @@
       if (isNaN(d.getTime())) return dateStr;
     }
     const now = new Date();
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
-           `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    return (
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+      `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+    );
   }
 
   // --- Заполнение поля (ждёт появления через MO ядра, не setInterval) ---
@@ -160,7 +193,7 @@
     try {
       const input = await waitForElement(selector, { timeout: FILL_TIMEOUT });
       if (input.tagName.toLowerCase() === 'select') {
-        const option = Array.from(input.options).find(o => o.text.trim() === value.trim());
+        const option = Array.from(input.options).find((o) => o.text.trim() === value.trim());
         if (option) {
           input.value = option.value;
           input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -171,8 +204,9 @@
         // визуально поле остаётся пустым, хотя DOM-атрибут меняется (см. agis-duplicate-income.user.js,
         // где та же форма заполняется именно через нативный сеттер прототипа).
         const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')?.set;
-        if (setter) setter.call(input, value); else input.value = value;
-        input.dispatchEvent(new Event('input',  { bubbles: true }));
+        if (setter) setter.call(input, value);
+        else input.value = value;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new Event('change', { bubbles: true }));
         if (window.jQuery) window.jQuery(input).trigger('change');
       }
@@ -186,8 +220,12 @@
     const btn = document.createElement('button');
     btn.textContent = 'Подгрузить данные из Google Sheets';
     Object.assign(btn.style, {
-      position: 'fixed', top: '10px', right: '10px',
-      zIndex: '10000', padding: '6px 12px', cursor: 'pointer',
+      position: 'fixed',
+      top: '10px',
+      right: '10px',
+      zIndex: '10000',
+      padding: '6px 12px',
+      cursor: 'pointer',
     });
     return btn;
   }
@@ -209,8 +247,12 @@
 
     // Ждём body (document-start не гарантирует его наличие)
     let body;
-    try { body = await waitForElement('body'); }
-    catch (e) { warn('body не найден:', e.message); return; }
+    try {
+      body = await waitForElement('body');
+    } catch (e) {
+      warn('body не найден:', e.message);
+      return;
+    }
     if (!routeTokenController.isCurrent(token)) return;
 
     let sheetUrl = await storageGet(STORAGE_KEY, '');
@@ -219,7 +261,7 @@
     if (!sheetUrl) {
       sheetUrl = prompt(
         'AGIS: введите ссылку на опубликованную Google Таблицу (формат CSV):\n' +
-        'Пример: https://docs.google.com/spreadsheets/d/ID/export?format=csv&gid=0'
+          'Пример: https://docs.google.com/spreadsheets/d/ID/export?format=csv&gid=0',
       );
       if (!sheetUrl?.trim()) {
         alert('URL не задан. Скрипт не будет работать до его указания.');
@@ -258,7 +300,7 @@
   async function fillForm(data) {
     const match = location.pathname.match(/\/(\d+)\/income\/create/);
     if (!match) return;
-    const id   = match[1];
+    const id = match[1];
     const fill = data[id];
     if (!fill) {
       alert('Для номера заявки ' + id + ' нет данных в таблице!');
@@ -268,10 +310,10 @@
     // <div id="sonata-ba-field-container-..._income">, чей id тоже оканчивается
     // на "_income" — без тега querySelector находил эту обёртку раньше настоящего
     // <input>, и .value = ... беззвучно оседал на div, не долетая до формы.
-    await waitForAndFill('input[id$="_bankPaymentId"]',  fill.order);
-    await waitForAndFill('input[id$="_income"]',         fill.sum);
-    await waitForAndFill('input[id$="_incomeDate"]',     toDateTimeString(fill.date));
-    await waitForAndFill('textarea[id$="_comment"]',     fill.comment);
+    await waitForAndFill('input[id$="_bankPaymentId"]', fill.order);
+    await waitForAndFill('input[id$="_income"]', fill.sum);
+    await waitForAndFill('input[id$="_incomeDate"]', toDateTimeString(fill.date));
+    await waitForAndFill('textarea[id$="_comment"]', fill.comment);
     await waitForAndFill('select[id$="_manualIncomeType"]', fill.incomeType);
     log('Автозаполнение:', id, fill);
   }
@@ -279,10 +321,14 @@
   // --- Запуск ---
   stopUrlWatcher = onUrlChange(() => bootstrap());
 
-  window.addEventListener('pagehide', () => {
-    cleanup();
-    stopUrlWatcher();
-  }, { once: true });
+  window.addEventListener(
+    'pagehide',
+    () => {
+      cleanup();
+      stopUrlWatcher();
+    },
+    { once: true },
+  );
 
   (async () => {
     await migrateLegacyStorage();

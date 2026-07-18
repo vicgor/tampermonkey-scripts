@@ -4,15 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Что это за репозиторий
 
-Набор Tampermonkey-userscript'ов (чистый JavaScript, без сборки, без зависимостей,
-без `package.json`) для внутренней admin-панели AGIS (`agis.<бренд>.ru`, 7 доменов-брендов:
+Набор Tampermonkey-userscript'ов (чистый JavaScript, без сборки и бандлинга)
+для внутренней admin-панели AGIS (`agis.<бренд>.ru`, 7 доменов-брендов:
 creditsmile, belkacredit, volgazaim, berrycash, moneymania, credit7, credit365).
 Каждый файл в `scripts/*.user.js` — самостоятельный production-скрипт, который
 пользователь вручную устанавливает в Tampermonkey.
 
-Нет build/lint/test команд — это не Node-проект. Проверка изменений — ручной
-smoke-test в браузере (см. ниже) и чтение кода, т.к. запускать userscript можно
-только внутри Tampermonkey в реальном браузере.
+Есть `package.json` для ESLint + Prettier (`npm install`, затем `npm run lint` /
+`npm run format`) — только для качества кода, не для сборки: скрипты по-прежнему
+ставятся в Tampermonkey как есть, без бандлинга. Нет build/test команд —
+запускать userscript можно только внутри Tampermonkey в реальном браузере,
+проверка изменений — ручной smoke-test (см. ниже) и чтение кода.
 
 ## Роли файлов (важно понимать перед правкой)
 
