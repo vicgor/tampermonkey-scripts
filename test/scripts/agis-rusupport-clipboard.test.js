@@ -41,4 +41,9 @@ describe('textHash', () => {
   it('возвращает строку', () => {
     expect(typeof textHash('hello')).toBe('string');
   });
+
+  it('падает на null/undefined — вызывающий код (appendText) всегда передаёт результат .trim(), не null-safe по дизайну', () => {
+    expect(() => textHash(null)).toThrow();
+    expect(() => textHash(undefined)).toThrow();
+  });
 });

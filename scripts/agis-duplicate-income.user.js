@@ -27,7 +27,7 @@
   // только extractTotal — resolveGateway/normalizeDate не самодостаточны
   // (GATEWAY_MAP/ruMonthNumber объявлены ниже и не успеют инициализироваться при
   // раннем return). В Tampermonkey module не определён — блок не выполняется.
-  if (typeof module !== 'undefined' && module.exports) {
+  if (typeof process !== 'undefined' && process.versions?.node && typeof module !== 'undefined' && module.exports) {
     module.exports = { extractTotal };
     return;
   }

@@ -26,7 +26,7 @@
   // Тестовый экспорт для vitest (см. test/scripts/agis-rusupport-clipboard.test.js) —
   // до window-guard'а ниже, т.к. в Node window не определён вообще. В Tampermonkey
   // module не определён — блок не выполняется, поведение не меняется.
-  if (typeof module !== 'undefined' && module.exports) {
+  if (typeof process !== 'undefined' && process.versions?.node && typeof module !== 'undefined' && module.exports) {
     module.exports = { normalizePathKey, hasKeyword, textHash };
     return;
   }

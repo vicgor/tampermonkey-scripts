@@ -36,7 +36,7 @@
   // applyDateFormatting (зависят от ruMonthNumber ядра) и statusColor (зависит от
   // STATUS_*-множеств, объявленных ниже) сюда не входят — не самодостаточны при
   // раннем return. В Tampermonkey module не определён — блок не выполняется.
-  if (typeof module !== 'undefined' && module.exports) {
+  if (typeof process !== 'undefined' && process.versions?.node && typeof module !== 'undefined' && module.exports) {
     module.exports = {
       normalizeText,
       pad2,

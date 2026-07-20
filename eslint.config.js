@@ -41,10 +41,12 @@ module.exports = [
       globals: {
         ...globals.browser,
         ...tampermonkeyGlobals,
-        // Волна 5: guard `if (typeof module !== 'undefined' && module.exports)` в
-        // начале/конце IIFE экспортирует чистые функции для vitest. В Tampermonkey
-        // module не определён — блок мёртвый код, но ESLint должен знать про global.
+        // Волна 5: guard `if (typeof process !== 'undefined' && process.versions?.node &&
+        // typeof module !== 'undefined' && module.exports)` в начале/конце IIFE экспортирует
+        // чистые функции для vitest. В Tampermonkey ни process, ни module не определены —
+        // блок мёртвый код, но ESLint должен знать про оба global'а.
         module: 'readonly',
+        process: 'readonly',
       },
     },
     rules: {
@@ -116,9 +118,11 @@ module.exports = [
       globals: {
         ...globals.browser,
         ...tampermonkeyGlobals,
-        // Волна 5: guard `if (typeof module !== 'undefined' && module.exports)`
-        // перед window.__AGIS_CORE__ = {...} экспортирует ruMonthNumber для vitest.
+        // Волна 5: guard `if (typeof process !== 'undefined' && process.versions?.node &&
+        // typeof module !== 'undefined' && module.exports)` перед window.__AGIS_CORE__ = {...}
+        // экспортирует ruMonthNumber для vitest.
         module: 'readonly',
+        process: 'readonly',
       },
     },
     rules: {
@@ -140,10 +144,19 @@ module.exports = [
     },
   },
   {
-    files: ['eslint.config.js', 'vitest.config.js'],
+    files: ['eslint.config.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'commonjs',
+      globals: { ...globals.node },
+    },
+  },
+  {
+    // vitest.config.js — ESM (см. комментарий про import в самом файле).
+    files: ['vitest.config.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
       globals: { ...globals.node },
     },
   },

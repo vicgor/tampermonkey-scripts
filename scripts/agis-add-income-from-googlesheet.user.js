@@ -30,7 +30,7 @@
   // нему упадёт раньше, чем успеет сработать проверка). Экспортирует только
   // самодостаточные функции (без window/DOM/GM_*). В Tampermonkey module не
   // определён — блок не выполняется, поведение не меняется.
-  if (typeof module !== 'undefined' && module.exports) {
+  if (typeof process !== 'undefined' && process.versions?.node && typeof module !== 'undefined' && module.exports) {
     module.exports = { parseCSV, tokenizeCSV, pad };
     return;
   }

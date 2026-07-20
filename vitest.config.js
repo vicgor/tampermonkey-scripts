@@ -1,10 +1,8 @@
-'use strict';
-
-const { defineConfig } = require('vitest/config');
+import { defineConfig } from 'vitest/config';
 
 // Тестируем только чистые парсеры (см. README.md "Тесты") — DOM/GM_* здесь не нужны,
 // поэтому окружение 'node', а не 'jsdom'.
-module.exports = defineConfig({
+export default defineConfig({
   test: {
     environment: 'node',
     include: ['test/**/*.test.js'],
