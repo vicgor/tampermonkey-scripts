@@ -1,0 +1,234 @@
+<!--
+  Реальный кусок страницы /admin/agis2/core/loan/<id>/edit AGIS (BelkaCredit), полученный
+  из браузера пользователем репозитория и урезанный до того, что читает parseDoc()
+  в scripts/agis-loan-info-navbar.user.js (см. test/scripts/agis-loan-info-navbar.dom.test.js).
+  Имя верификатора и IP заменены на заведомо не настоящие (репозиторий публичный) —
+  остальная структура/суммы/даты/статус не изменены.
+
+  Сохранён реальный "decoy"-кейс: скрытая preview-таблица объединения транзакций после
+  каникул стоит в документе РАНЬШЕ основного блока "Основное" и тоже содержит
+  <th>Дата</th>/<th>Тип</th>/<th>Сумма</th> — но у неё нет <td> в той же <tr> (только thead),
+  поэтому getRowCell() должен её пропустить, а не вернуть пустой/неверный td.
+-->
+<!DOCTYPE html>
+<html>
+<body>
+
+<div class="combine_transactions_after_vacation_preview" style="display: none; overflow: auto;">
+    <table class="table table-hover" id="combine_transactions_after_vacation_preview">
+        <thead>
+        <tr>
+            <th>Дата</th>
+            <th>Тип</th>
+            <th>Сумма</th>
+            <th>Направление</th>
+            <th>Приход</th>
+        </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+</div>
+
+<div class="col-md-6 admin-height-630">
+    <div class="box box-primary">
+        <div class="box-header"><h4 class="box-title">Клиент</h4></div>
+        <div class="box-body table-responsive no-padding">
+            <table class="table">
+                <tbody>
+                <tr class="sonata-ba-view-container">
+                    <td colspan="2">Тестова Тестина Тестовна (ж)</td>
+                </tr>
+                <tr class="sonata-ba-view-container">
+                    <th>Дата регистрации</th>
+                    <td>24 февр. 2025 г.</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="col-md-6 admin-height-630">
+    <div class="box box-primary">
+        <div class="box-header"><h4 class="box-title">Основное</h4></div>
+        <div class="box-body table-responsive no-padding">
+            <table class="table">
+                <tbody>
+                <tr class="sonata-ba-view-container">
+                    <th>ID</th>
+                    <td>
+                        8593833
+                        <span class="text-info" style="color: grey;">(8593833)</span>
+                    </td>
+                </tr>
+                <tr class="sonata-ba-view-container">
+                    <th>UID</th>
+                    <td>abe4e216-f319-11ef-81be-005056940819-f</td>
+                </tr>
+                <tr class="sonata-ba-view-container">
+                    <th>Статус</th>
+                    <td>  Продан <br />
+
+                    </td>
+                </tr>
+                <tr class="sonata-ba-view-container">
+                    <th>Сумма</th>
+                    <td>    <style type="text/css">
+                        .custom-dl-horizontal-amount dt {
+                            width: 120px;
+                            font-weight: normal;
+                        }
+
+                        .custom-dl-horizontal-amount dd {
+                            margin-left: 130px;
+                        }
+                    </style>
+
+                        <dl class="dl-horizontal custom-dl-horizontal-amount">
+
+                            <dt title="Запрашиваемая сумма изначально" class="show-tooltip" style="white-space: normal;">
+                                Запрашиваемая сумма изначально
+                            </dt>
+                            <dd>
+                                10 000,00 ₽
+                            </dd>
+
+                            <dt title="Сумма" class="show-tooltip" style="white-space: normal;">
+                                Тело
+                            </dt>
+                            <dd>
+                                0,00 ₽
+                                <span class="text-muted">(Запрошено
+                                    : 10 000,00 ₽)</span>
+                            </dd>
+
+                            <dt style="color: darkred; white-space: initial;">Вознаграждение на сегодня</dt>
+                            <dd style="color: darkred;">
+                                0,00 ₽
+                                <span class="text-muted">(Запрошенное
+                                    : 2 400,00 ₽)</span>
+
+                            </dd>
+
+                            <dt style="color: darkred; white-space: initial;">Сумма продления на сегодня</dt>
+                            <dd style="color: darkred;">
+                                Продление недоступно
+                            </dd>
+
+                            <dt style="color: red;">Штраф</dt>
+                            <dd style="color: red;">0,00 ₽
+                            </dd>
+
+                            <dt style="color: red; display: none;">Фикс. штраф</dt>
+                            <dd style="color: red; display: none;">0,00 ₽</dd>
+
+                            <dt style="white-space: normal;">Депозит</dt>
+                            <dd style="white-space: normal;">0,00 ₽</dd>
+
+                            <dt style="color: #006680; font-weight: bold; white-space: initial;">Итого на сегодня</dt>
+                            <dd style="color: #006680; font-weight: bold;">0,00 ₽</dd>
+                        </dl>
+                    </td>
+                </tr>
+                <tr class="sonata-ba-view-container">
+                    <th>Верификатор</th>
+                    <td>
+                        <a href="/admin/agis2/core/admuser/1/show">Тестов Тест Тестович #1</a>
+                    </td>
+                </tr>
+                <tr class="sonata-ba-view-container">
+                    <th>Одобрено</th>
+                    <td></td>
+                </tr>
+                <tr class="sonata-ba-view-container">
+                    <th>Оператор горячей линии</th>
+                    <td></td>
+                </tr>
+                <tr class="sonata-ba-view-container">
+                    <th>ExtraSmall</th>
+                    <td><span class="label label-warning">нет</span></td>
+                </tr>
+                <tr class="sonata-ba-view-container">
+                    <th>Up Sale</th>
+                    <td><span class="label label-warning">нет</span></td>
+                </tr>
+                <tr class="sonata-ba-view-container">
+                    <th>Коллектор</th>
+                    <td></td>
+                </tr>
+                <tr class="sonata-ba-view-container">
+                    <th>Дата</th>
+                    <td>  <style type="text/css">
+                        .custom-dl-horizontal-date dt {width: 160px; font-weight: normal;}
+                        .custom-dl-horizontal-date dd {margin-left: 110px;}
+                    </style>
+
+                        <dl class="dl-horizontal custom-dl-horizontal-date">
+                            <dt>Запрошен: </dt>
+                            <dd>25 февр. 2025 г., 04:41:45 на <b>30 дней </b></dd>
+
+                            <dt style="color: green">Одобрен:</dt>
+                            <dd style="color: green">25 февр. 2025 г., 04:47:34</dd>
+
+                            <style>
+                                .loan-issue-date .custom-dl-horizontal-date dt {width: auto; font-weight: normal;}
+                                .loan-issue-date .custom-dl-horizontal-date dd {margin-left: 0;}
+                                .loan-issue-date dl {margin-bottom: 0;}
+                            </style>
+
+                            <dt>Выдан:&nbsp;</dt>
+                            <dd>25 февр. 2025 г.</dd>
+                            <dt>Время выдачи:&nbsp;</dt>
+                            <dd>04:51:10</dd>
+
+                            <dt>До:</dt>
+                            <dd>27 мар. 2025 г. на <b>          30 дней
+                            </b> </dd>
+
+                            <dt style="color: #4a8cdb">Итого:</dt>
+                            <dd style="color: #4a8cdb">
+                                30 дней
+
+                                <span style="color: #CCCCCC">(    1 месяц
+                                    2 дня
+                                    )</span>
+                            </dd>
+
+                            <dt style="color: red">Просрочен на:</dt>
+                            <dd style="color: red">2 дня</dd>
+
+                            <dt style="color: red">Дата возврата:</dt>
+                            <dd style="color: red">14 мар. 2025 г.</dd>
+                        </dl>
+                    </td>
+                </tr>
+                <tr class="sonata-ba-view-container">
+                    <th>IP заявки</th>
+                    <td>203.0.113.10</td>
+                </tr>
+                <tr class="sonata-ba-view-container">
+                    <th>Подтверждено</th>
+                    <td><span class="label label-success">да</span> <span style="color: #CCCCCC">25 февр. 2025 г., 04:50:15</span>
+                    </td>
+                </tr>
+                <tr class="sonata-ba-view-container">
+                    <th>Дисконтный код</th>
+                    <td><span> нет</span></td>
+                </tr>
+                <tr class="sonata-ba-view-container">
+                    <th>Прайслист</th>
+                    <td><span>RU COMMISSION 0.8% 1.3x</span></td>
+                </tr>
+                <tr class="sonata-ba-view-container">
+                    <th>Тип</th>
+                    <td><span class="label label-default">PayDay</span></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

@@ -44,9 +44,12 @@ module.exports = [
         // Волна 5: guard `if (typeof process !== 'undefined' && process.versions?.node &&
         // typeof module !== 'undefined' && module.exports)` в начале/конце IIFE экспортирует
         // чистые функции для vitest. В Tampermonkey ни process, ни module не определены —
-        // блок мёртвый код, но ESLint должен знать про оба global'а.
+        // блок мёртвый код, но ESLint должен знать про оба global'а. require — Волна 5.1
+        // (agis-loan-info-navbar.user.js require()'ит lib/agis-core.js внутри той же
+        // Node-only ветки, чтобы не дублировать ruMonthNumber для теста).
         module: 'readonly',
         process: 'readonly',
+        require: 'readonly',
       },
     },
     rules: {
@@ -175,11 +178,13 @@ module.exports = [
     // vitest 4 нельзя require()'ить (падает с ошибкой), тесты используют import;
     // именованный import из module.exports-файлов (*.user.js/agis-core.js) работает
     // через CJS-интероп Vite — проверено эмпирически, добавлять .cjs/.mjs не нужно.
+    // globals.browser — часть тестов (Волна 5.1, *.dom.test.js) помечена
+    // `// @vitest-environment jsdom` и использует DOMParser/document.
     files: ['test/**/*.test.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
-      globals: { ...globals.node },
+      globals: { ...globals.node, ...globals.browser },
     },
   },
   prettierConfig,
