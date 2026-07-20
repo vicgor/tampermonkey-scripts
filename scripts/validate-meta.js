@@ -18,6 +18,9 @@ const TAMPERMONKEY_DEFAULT_NAMESPACE = 'http://tampermonkey.net/';
 // Каждая обёртка core вызывает ровно эти GM_*-функции (проверено чтением
 // lib/agis-core.js: storageGet/storageSet/storageSetDebounced/storageDelete/httpRequest/
 // api.*/registerDebugToggle — единственные GM-зависимые экспорты ядра).
+// Ограничение: детектируется только вызов через точку (`api.getJson(`), не bracket
+// notation (`api['getJson'](`) — на текущих 8 скриптах такого нет, при появлении
+// потребуется расширить requiredGrants().
 const WRAPPER_GRANTS = {
   storageGet: ['GM_getValue'],
   storageSet: ['GM_setValue'],
@@ -45,6 +48,7 @@ const RAW_GM_NAMES = [
   'GM_setClipboard',
 ];
 
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions#escaping
 function escapeRegExp(literal) {
   return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -56,6 +60,7 @@ function parseMetablock(content, file) {
     throw new Error(`${file}: не найден блок // ==UserScript== ... // ==/UserScript==`);
   }
   const header = content.slice(start, end);
+  // body — всё после закрывающего тега метаблока; GM_*-паттерны requiredGrants() ищет только здесь.
   const body = content.slice(end + '// ==/UserScript=='.length);
 
   const fields = {};
@@ -70,6 +75,10 @@ function parseMetablock(content, file) {
   return { fields, body };
 }
 
+// Ограничение: регулярки ищут паттерн `имя(` по всему телу файла, включая строки
+// и комментарии (например, комментарий "используй GM_setValue(...)" тоже засчитается
+// как использование) — на текущих 8 скриптах ложных срабатываний из-за этого нет,
+// но при появлении подобных комментариев проверяй результат вручную.
 function requiredGrants(body) {
   const required = new Set();
 
@@ -87,6 +96,9 @@ function requiredGrants(body) {
 }
 
 function matchHost(matchValue) {
+  // file:// не имеет сетевого хоста — "file://*/..." легитимный паттерн для локальных
+  // файлов, не "открыт на любой хост" в смысле CLAUDE.md (это про http(s)-домены).
+  if (matchValue.startsWith('file://')) return null;
   const m = matchValue.match(/^[a-zA-Z*][a-zA-Z*+-]*:\/\/([^/]+)\//);
   return m ? m[1] : null;
 }
@@ -177,12 +189,15 @@ function main() {
     }
   }
 
+  let totalWarnings = 0;
   for (const { file, errors, warnings } of results) {
     for (const message of errors) console.error(`[validate-meta] ERROR ${file}: ${message}`);
     for (const message of warnings) console.warn(`[validate-meta] WARN  ${file}: ${message}`);
+    totalWarnings += warnings.length;
   }
 
   console.log(`[validate-meta] проверено файлов: ${files.length}`);
+  if (totalWarnings > 0) console.log(`[validate-meta] warnings: ${totalWarnings}`);
   process.exit(hasErrors ? 1 : 0);
 }
 
