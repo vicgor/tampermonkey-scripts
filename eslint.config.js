@@ -44,12 +44,12 @@ module.exports = [
         // Волна 5: guard `if (typeof process !== 'undefined' && process.versions?.node &&
         // typeof module !== 'undefined' && module.exports)` в начале/конце IIFE экспортирует
         // чистые функции для vitest. В Tampermonkey ни process, ни module не определены —
-        // блок мёртвый код, но ESLint должен знать про оба global'а. require — Волна 5.1
-        // (agis-loan-info-navbar.user.js require()'ит lib/agis-core.js внутри той же
-        // Node-only ветки, чтобы не дублировать ruMonthNumber для теста).
+        // блок мёртвый код, но ESLint должен знать про оба global'а. require — НЕ здесь:
+        // используется только в agis-loan-info-navbar.user.js (см. отдельный блок ниже),
+        // остальные 6 скриптов require() не вызывают и не должны — если он появится в их
+        // production-пути, это должно остаться ошибкой ESLint, а не молча пройти.
         module: 'readonly',
         process: 'readonly',
-        require: 'readonly',
       },
     },
     rules: {
@@ -144,6 +144,17 @@ module.exports = [
       'no-empty': ['error', { allowEmptyCatch: true }],
       // setInterval здесь — единственный легитимный случай в репозитории: fallback-поллинг
       // URL в onUrlChange на случай пропущенного pushState/popstate (см. комментарий в коде).
+    },
+  },
+  {
+    // Волна 5.1: только этот скрипт require()'ит lib/agis-core.js внутри Node-only ветки
+    // guard'а, чтобы получить ruMonthNumber для теста без дублирования её логики (см.
+    // README.md "Тесты"). require НЕ добавлен в общий globals-блок scripts/**/*.user.js
+    // выше — если он появится в production-пути любого из остальных 6 скриптов, это
+    // должно остаться ошибкой ESLint (no-undef), а не молча пройти.
+    files: ['scripts/agis-loan-info-navbar.user.js'],
+    languageOptions: {
+      globals: { require: 'readonly' },
     },
   },
   {
