@@ -152,6 +152,16 @@ module.exports = [
     },
   },
   {
+    // scripts/validate-meta.js — Node CLI-тулинг (Волна 4.5), не userscript,
+    // поэтому не подпадает под files: ['scripts/**/*.user.js'] выше.
+    files: ['scripts/validate-meta.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'commonjs',
+      globals: { ...globals.node },
+    },
+  },
+  {
     // vitest.config.js — ESM (см. комментарий про import в самом файле).
     files: ['vitest.config.js'],
     languageOptions: {
