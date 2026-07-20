@@ -36,3 +36,6 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      - name: Метаблок-валидатор
+        run: npm run validate-meta
