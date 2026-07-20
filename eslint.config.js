@@ -35,13 +35,16 @@ module.exports = [
       ecmaVersion: 2022,
       // 'script', не 'module': Tampermonkey @require грузит и выполняет классический
       // скрипт, ESM (import/export) не поддерживает — это архитектурно, не наш выбор,
-      // так что менять не придётся. Если в Волне 5 появятся vitest-тесты на Node ESM —
-      // им нужен отдельный блок конфига с sourceType: 'module', ограниченный
-      // files: ['**/*.test.js'], а не правка этого блока.
+      // так что менять не придётся. Волна 5 добавила vitest-тесты, но им нужен Node
+      // CommonJS (require/module), а не ESM — см. отдельный блок files: ['test/**/*.test.js'].
       sourceType: 'script',
       globals: {
         ...globals.browser,
         ...tampermonkeyGlobals,
+        // Волна 5: guard `if (typeof module !== 'undefined' && module.exports)` в
+        // начале/конце IIFE экспортирует чистые функции для vitest. В Tampermonkey
+        // module не определён — блок мёртвый код, но ESLint должен знать про global.
+        module: 'readonly',
       },
     },
     rules: {
@@ -113,6 +116,9 @@ module.exports = [
       globals: {
         ...globals.browser,
         ...tampermonkeyGlobals,
+        // Волна 5: guard `if (typeof module !== 'undefined' && module.exports)`
+        // перед window.__AGIS_CORE__ = {...} экспортирует ruMonthNumber для vitest.
+        module: 'readonly',
       },
     },
     rules: {
@@ -134,10 +140,22 @@ module.exports = [
     },
   },
   {
-    files: ['eslint.config.js'],
+    files: ['eslint.config.js', 'vitest.config.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'commonjs',
+      globals: { ...globals.node },
+    },
+  },
+  {
+    // Волна 5: тесты на чистые парсеры (см. README.md "Тесты"). sourceType 'module' —
+    // vitest 4 нельзя require()'ить (падает с ошибкой), тесты используют import;
+    // именованный import из module.exports-файлов (*.user.js/agis-core.js) работает
+    // через CJS-интероп Vite — проверено эмпирически, добавлять .cjs/.mjs не нужно.
+    files: ['test/**/*.test.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
       globals: { ...globals.node },
     },
   },

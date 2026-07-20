@@ -52,6 +52,14 @@
 (() => {
   'use strict';
 
+  // Тестовый экспорт для vitest (см. test/scripts/agis-protocol-income-fill.test.js) —
+  // до window-guard'а ниже, т.к. в Node window не определён вообще. В Tampermonkey
+  // module не определён — блок не выполняется, поведение не меняется.
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { normalizeText, parseAmount };
+    return;
+  }
+
   if (!window.__AGIS_CORE__) {
     console.error('[agis:protocol-income] agis-core.js не загружен (@require не сработал)');
     return;

@@ -21,6 +21,14 @@
 (() => {
   'use strict';
 
+  // Тестовый экспорт для vitest (см. test/scripts/agis-linkify-loan-note.test.js) —
+  // до window-guard'а ниже, т.к. в Node window не определён вообще. В Tampermonkey
+  // module не определён — блок не выполняется, поведение не меняется.
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { getTokenRe };
+    return;
+  }
+
   if (!window.__AGIS_CORE__) {
     console.error('[agis:linkify] agis-core.js не загружен (@require не сработал)');
     return;
