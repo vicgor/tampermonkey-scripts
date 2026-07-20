@@ -31,6 +31,25 @@
 (function () {
   'use strict';
 
+  // Тестовый экспорт для vitest (см. test/scripts/agis-loan-info-navbar.test.js) —
+  // до window-guard'а ниже, т.к. в Node window не определён вообще. formatDateDDMMYY/
+  // applyDateFormatting (зависят от ruMonthNumber ядра) и statusColor (зависит от
+  // STATUS_*-множеств, объявленных ниже) сюда не входят — не самодостаточны при
+  // раннем return. В Tampermonkey module не определён — блок не выполняется.
+  if (typeof process !== 'undefined' && process.versions?.node && typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      normalizeText,
+      pad2,
+      toTwoDigitYear,
+      isValidDateParts,
+      buildShortDate,
+      extractValue,
+      compactData,
+      hasUsefulData,
+    };
+    return;
+  }
+
   if (!window.__AGIS_CORE__) {
     console.error('[agis:loan-info] agis-core.js не загружен (@require не сработал)');
     return;

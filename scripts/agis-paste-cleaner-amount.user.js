@@ -26,6 +26,14 @@
   // мутабельного main. Смена хеша/содержимого lib/agis-core.js внутри
   // тега v1.0.0 невозможна — новые версии ядра идут новым тегом.
 
+  // Тестовый экспорт для vitest (см. test/scripts/agis-paste-cleaner-amount.test.js) —
+  // до window-guard'а ниже, т.к. в Node window не определён вообще. В Tampermonkey
+  // module не определён — блок не выполняется, поведение не меняется.
+  if (typeof process !== 'undefined' && process.versions?.node && typeof module !== 'undefined' && module.exports) {
+    module.exports = { cleanInput };
+    return;
+  }
+
   if (!window.__AGIS_CORE__) {
     console.error('[agis:paste-cleaner] agis-core.js не загружен (@require не сработал)');
     return;

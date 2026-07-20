@@ -25,6 +25,16 @@
 (() => {
   'use strict';
 
+  // Тестовый экспорт для vitest (см. test/scripts/agis-add-income-from-googlesheet.test.js) —
+  // до window-guard'а ниже, т.к. в Node window не определён вообще (обращение к
+  // нему упадёт раньше, чем успеет сработать проверка). Экспортирует только
+  // самодостаточные функции (без window/DOM/GM_*). В Tampermonkey module не
+  // определён — блок не выполняется, поведение не меняется.
+  if (typeof process !== 'undefined' && process.versions?.node && typeof module !== 'undefined' && module.exports) {
+    module.exports = { parseCSV, tokenizeCSV, pad };
+    return;
+  }
+
   if (!window.__AGIS_CORE__) {
     console.error('[agis:googlesheet] agis-core.js не загружен (@require не сработал)');
     return;

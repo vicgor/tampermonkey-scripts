@@ -22,6 +22,16 @@
 (() => {
   'use strict';
 
+  // Тестовый экспорт для vitest (см. test/scripts/agis-duplicate-income.test.js) —
+  // до window-guard'а ниже, т.к. в Node window не определён вообще. Экспортирует
+  // только extractTotal — resolveGateway/normalizeDate не самодостаточны
+  // (GATEWAY_MAP/ruMonthNumber объявлены ниже и не успеют инициализироваться при
+  // раннем return). В Tampermonkey module не определён — блок не выполняется.
+  if (typeof process !== 'undefined' && process.versions?.node && typeof module !== 'undefined' && module.exports) {
+    module.exports = { extractTotal };
+    return;
+  }
+
   if (!window.__AGIS_CORE__) {
     console.error('[agis:duplicate-income] agis-core.js не загружен (@require не сработал)');
     return;
