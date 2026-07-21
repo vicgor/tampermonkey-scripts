@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - дублировать приход
 // @namespace    agis.duplicate.income
-// @version      3.2.1
+// @version      3.2.2
 // @description  Клик по строке прихода → открыть форму создания и автозаполнить (дата, шлюз, внешний ID, сумма). Ручное подтверждение.
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan*/*/income/*
@@ -22,13 +22,50 @@
 (() => {
   'use strict';
 
+  // Маппинг шлюзов: ключ — что приходит из ячейки AGIS, значение — что подставить в select формы.
+  // Поиск регистронезависимый — см. resolveGateway(). Вынесен сюда (до guard'а ниже), т.к.
+  // resolveGateway экспортируется для теста и читает GATEWAY_MAP по замыканию — если guard
+  // вернёт управление раньше, чем этот const инициализирован, вызов упадёт в TDZ.
+  const GATEWAY_MAP = {
+    euroalliance: 'Евроальянс',
+    евроальянс: 'Евроальянс',
+    mi_euroalliance: 'Евроальянс',
+    tinkoff: 'Tinkoff',
+    тинькофф: 'Tinkoff',
+    mi_tinkoff: 'Tinkoff',
+    alfa: 'Альфа-Банк',
+    'альфа-банк': 'Альфа-Банк',
+    qiwi: 'Qiwi',
+    'почта россии': 'Почта России',
+    mi_russianpost: 'Почта России',
+    korona: 'Korona',
+    contact: 'Contact',
+    elecsnet: 'Elecsnet',
+    mi_elecsnet: 'Elecsnet',
+    finstar: 'СИАБ-Банк', // AGIS отдаёт латиницей
+    mi_siab: 'СИАБ-Банк',
+    'сиаб-банк': 'СИАБ-Банк',
+    'ткб банк': 'ТКБ Банк',
+    'твои платежи': 'Твои платежи',
+    цессия: 'Цессия',
+    mi_cession: 'Цессия',
+    'возврат продукта': 'Возврат продукта',
+    mi_refund_product: 'Возврат продукта',
+    иное: 'Иное',
+  };
+  // ruMonthNumber приходит из ядра (window.__AGIS_CORE__), не объявлен здесь локально —
+  // let вместо const, значение назначается в одной из двух веток ниже (та же схема, что и
+  // в agis-loan-info-navbar.user.js/agis-protocol-income-fill.user.js).
+  let ruMonthNumber;
+
   // Тестовый экспорт для vitest (см. test/scripts/agis-duplicate-income.test.js) —
-  // до window-guard'а ниже, т.к. в Node window не определён вообще. Экспортирует
-  // только extractTotal — resolveGateway/normalizeDate не самодостаточны
-  // (GATEWAY_MAP/ruMonthNumber объявлены ниже и не успеют инициализироваться при
-  // раннем return). В Tampermonkey module не определён — блок не выполняется.
+  // до window-guard'а ниже, т.к. в Node window не определён вообще. ruMonthNumber в
+  // тестовом окружении берём напрямую из lib/agis-core.js (require живой только в этой
+  // Node-ветке — в Tampermonkey process/module не определены, ветка не выполняется),
+  // чтобы не дублировать её логику.
   if (typeof process !== 'undefined' && process.versions?.node && typeof module !== 'undefined' && module.exports) {
-    module.exports = { extractTotal };
+    ruMonthNumber = require('../lib/agis-core.js').ruMonthNumber;
+    module.exports = { extractTotal, resolveGateway, normalizeDate };
     return;
   }
 
@@ -48,9 +85,9 @@
     storageSet,
     storageDelete,
     showBanner,
-    ruMonthNumber,
     cellText,
   } = window.__AGIS_CORE__;
+  ruMonthNumber = window.__AGIS_CORE__.ruMonthNumber;
 
   const SCRIPT_NS = 'agis:duplicate-income';
   const DOM_NS = 'agis-duplicate-income'; // без двоеточия — для CSS/id, если понадобятся
@@ -93,37 +130,7 @@
     }
   }
 
-  // Маппинг шлюзов: ключ — что приходит из ячейки AGIS, значение — что подставить в select формы.
-  // Поиск регистронезависимый — см. resolveGateway()
-  const GATEWAY_MAP = {
-    euroalliance: 'Евроальянс',
-    евроальянс: 'Евроальянс',
-    mi_euroalliance: 'Евроальянс',
-    tinkoff: 'Tinkoff',
-    тинькофф: 'Tinkoff',
-    mi_tinkoff: 'Tinkoff',
-    alfa: 'Альфа-Банк',
-    'альфа-банк': 'Альфа-Банк',
-    qiwi: 'Qiwi',
-    'почта россии': 'Почта России',
-    mi_russianpost: 'Почта России',
-    korona: 'Korona',
-    contact: 'Contact',
-    elecsnet: 'Elecsnet',
-    mi_elecsnet: 'Elecsnet',
-    finstar: 'СИАБ-Банк', // AGIS отдаёт латиницей
-    mi_siab: 'СИАБ-Банк',
-    'сиаб-банк': 'СИАБ-Банк',
-    'ткб банк': 'ТКБ Банк',
-    'твои платежи': 'Твои платежи',
-    цессия: 'Цессия',
-    mi_cession: 'Цессия',
-    'возврат продукта': 'Возврат продукта',
-    mi_refund_product: 'Возврат продукта',
-    иное: 'Иное',
-  };
-
-  // Регистронезависимый поиск шлюза в маппинге.
+  // Регистронезависимый поиск шлюза в маппинге (GATEWAY_MAP объявлен до guard'а выше).
   // Ключи в GATEWAY_MAP хранятся в lower-case — приводим raw к нижнему регистру перед поиском.
   function resolveGateway(raw) {
     return GATEWAY_MAP[raw.toLowerCase()] ?? raw;
