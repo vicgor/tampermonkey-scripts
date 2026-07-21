@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      5.4.0
+// @version      5.5.0
 // @description  Полноширинная строка под навбаром с информацией о займе и цветным статусом
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*
@@ -115,9 +115,9 @@
   // Fallback-цепочка: пробуем селекторы по очереди, возвращаем первый найденный
   const NAVBAR_SELECTORS = ['.navbar-static-top', '.top-navbar', 'header.navbar', '#content'];
   const CACHE_TTL = 5 * 60 * 1000;
-  // v46 — бамп из-за фикса parseLoanContextFromUrl (loan-extended и другие секции теперь
-  // распознаются). Формат ключа не менялся, старые v45-ключи просто протухнут по TTL.
-  const CACHE_VERSION = 'v46';
+  // v47 — бамп из-за фикса overdueDays в parseDoc (раньше захватывал "Дата возврата:"
+  // целиком). Формат ключа не менялся, старые v46-ключи просто протухнут по TTL.
+  const CACHE_VERSION = 'v47';
   const WAIT_TIMEOUT = 20000;
 
   const routeTokenController = createRouteTokenController();
@@ -331,7 +331,10 @@
       data.issuedOn = extractValue(dc, 'Выдан:', /Время выдачи|До:|Продлен|Итого|Просрочен|$/);
       data.dueDate = extractValue(dc, 'До:', /Продлен|Итого|Просрочен|$/);
       data.totalTerm = extractValue(dc, 'Итого:', /Просрочен|$/);
-      data.overdueDays = extractValue(dc, 'Просрочен на:', /$/);
+      // Раньше стоп-регексп был только /$/ (конец строки), поэтому overdueDays захватывал
+      // ещё и следующее поле "Дата возврата:" целиком — реальный баг, найден фикстурой
+      // в test/scripts/agis-loan-info-navbar.dom.test.js (см. ROADMAP.md).
+      data.overdueDays = extractValue(dc, 'Просрочен на:', /Дата возврата|$/);
       data.extendedTo = extractValue(dc, 'Продлен до:', /Итого|Просрочен|$/);
     }
 
