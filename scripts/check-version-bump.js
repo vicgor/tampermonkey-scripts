@@ -37,21 +37,31 @@ function main() {
     return;
   }
 
-  const changedFiles = git(['diff', '--name-only', mergeBase, 'HEAD', '--', 'scripts/*.user.js'])
+  // --name-status, не --name-only: нужно отличать удалённые файлы (status 'D') —
+  // для них требовать бамп @version бессмысленно, бампать нечего, файла больше нет.
+  // glob 'scripts/*.user.js' раскрывается самим git (это pathspec, не шелл — аргументы
+  // в execFileSync шеллом не интерпретируются), так и задумано.
+  const statusLines = git(['diff', '--name-status', mergeBase, 'HEAD', '--', 'scripts/*.user.js'])
     .split('\n')
     .filter(Boolean);
 
-  if (changedFiles.length === 0) {
+  if (statusLines.length === 0) {
     console.log('[check-version-bump] scripts/*.user.js не менялись в этом PR.');
     return;
   }
 
   let hasErrors = false;
-  for (const file of changedFiles) {
+  for (const line of statusLines) {
+    const [status, file] = line.split('\t');
+    if (status === 'D') {
+      console.log(`[check-version-bump] SKIP ${file}: файл удалён, бампать нечего.`);
+      continue;
+    }
+
     const diff = git(['diff', mergeBase, 'HEAD', '--', file]);
-    // +/- строка с @version в unified diff означает, что значение реально менялось —
-    // не просто оказалось рядом с другой правкой.
-    const versionLineChanged = /^[+-]\s*\/\/ @version\b/m.test(diff);
+    // Ровно один + или - в начале строки — содержимое diff'а, а не заголовки файла
+    // (+++ b/... / --- a/...), у которых их два подряд.
+    const versionLineChanged = /^[+-](?![+-])\s*\/\/ @version\b/m.test(diff);
     if (versionLineChanged) {
       console.log(`[check-version-bump] OK ${file}: @version изменён`);
     } else {
