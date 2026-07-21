@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      5.5.0
+// @version      5.5.1
 // @description  Полноширинная строка под навбаром с информацией о займе и цветным статусом
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*
@@ -13,7 +13,7 @@
 // @match        https://agis.moneymania.ru/admin/agis2/core/loan*
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-loan-info-navbar.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-loan-info-navbar.user.js
-// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.2.0/lib/agis-core.js#sha256=dV8YKJZ5amc3KVhAYRg7WBQV/dUGFM4UwLKXLN8RZRg=
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.3.0/lib/agis-core.js#sha256=I5eLTR/TbTGLxg3Mj2f8pM/oBCcbJ6BLSNQxveEcSFQ=
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_getValue
@@ -61,17 +61,25 @@
     'ожидание суммы от клиента',
   ]);
   const STATUS_GREEN = new Set(['активный кредит', 'продлен', 'в работе коллектора']);
+  // ruMonthNumber/normalizeText приходят из ядра (window.__AGIS_CORE__), а не объявлены
+  // здесь локально — let вместо const/function, т.к. значение назначается в двух разных
+  // ветках ниже (тест vs браузер), см. комментарий у guard'а.
   let ruMonthNumber;
+  let normalizeText;
 
   // Тестовый экспорт для vitest (см. test/scripts/agis-loan-info-navbar.test.js и
   // test/scripts/agis-loan-info-navbar.dom.test.js) — до window-guard'а ниже, т.к. в Node
-  // window не определён вообще. ruMonthNumber в тестовом окружении берём напрямую из
-  // lib/agis-core.js (require живой только в этой Node-ветке — в Tampermonkey process/module
-  // не определены, ветка не выполняется), чтобы не дублировать её логику.
+  // window не определён вообще. ruMonthNumber/normalizeText в тестовом окружении берём
+  // напрямую из lib/agis-core.js (require живой только в этой Node-ветке — в Tampermonkey
+  // process/module не определены, ветка не выполняется), чтобы не дублировать их логику.
+  // Сам normalizeText не входит в module.exports ниже — он больше не принадлежит этому
+  // файлу, тестируется один раз в test/lib/agis-core.test.js (см. ROADMAP.md, устранение
+  // дублирования cellText/normalizeText).
   if (typeof process !== 'undefined' && process.versions?.node && typeof module !== 'undefined' && module.exports) {
-    ruMonthNumber = require('../lib/agis-core.js').ruMonthNumber;
+    const core = require('../lib/agis-core.js');
+    ruMonthNumber = core.ruMonthNumber;
+    normalizeText = core.normalizeText;
     module.exports = {
-      normalizeText,
       pad2,
       toTwoDigitYear,
       isValidDateParts,
@@ -106,6 +114,7 @@
     createRouteTokenController,
   } = window.__AGIS_CORE__;
   ruMonthNumber = window.__AGIS_CORE__.ruMonthNumber;
+  normalizeText = window.__AGIS_CORE__.normalizeText;
 
   // Стандарт репо: SCRIPT_NS = agis:<feature> (для лога и storage), DOM_NS — без двоеточия (для CSS/id).
   const SCRIPT_NS = 'agis:loan-info';
@@ -180,12 +189,9 @@
   }
 
   // --- Нормализация текста и дат ---
+  // normalizeText теперь из ядра (window.__AGIS_CORE__.normalizeText, см. guard выше) —
+  // локальная копия убрана, см. ROADMAP.md "Устранить дублирование cellText/normalizeText".
 
-  function normalizeText(value) {
-    return String(value || '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
   function pad2(v) {
     return String(v).padStart(2, '0');
   }
