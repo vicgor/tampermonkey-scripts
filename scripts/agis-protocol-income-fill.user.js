@@ -68,7 +68,7 @@
     const core = require('../lib/agis-core.js');
     normalizeText = core.normalizeText;
     cellText = core.cellText;
-    module.exports = { parseAmount };
+    module.exports = { parseAmount, getHeaderMap };
     return;
   }
 
