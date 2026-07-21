@@ -3,7 +3,9 @@
   AGIS, полученный из браузера пользователем репозитория и урезанный до 3 строк из ~20
   реальных (лишние строки убраны, разметка не менялась) — см.
   test/scripts/agis-protocol-income-fill.dom.test.js. Никаких персональных данных на этой
-  странице нет (только id протокола/займа, даты, суммы, статусы) — анонимизация не нужна.
+  странице нет (только id протокола/займа, даты, суммы, статусы) — анонимизация не нужна;
+  единственная замена — id самой supportprocesstask (2863 → 99999, внутренний
+  идентификатор системы в URL, не персональные данные, но заменён для консистентности).
 
   Реальная находка: на этой странице НЕТ колонки "Номер заказа" вообще — getHeaderMap()
   ищет 'номер заказа' по всем th, но такого заголовка тут не существует, поэтому
@@ -17,7 +19,7 @@
     <thead>
     <tr class="sonata-ba-list-field-header">
         <th class="sonata-ba-list-field-header-integer sonata-ba-list-field-header-order-desc sonata-ba-list-field-order-active" style="width: 5%; text-align: center;">
-            <a href="/admin/supportprocess/domain/supportprocesstask/2863/task-protocol/list?filter%5B_page%5D=1&amp;filter%5B_per_page%5D=250&amp;filter%5B_sort_order%5D=ASC&amp;filter%5B_sort_by%5D=id&amp;filter%5BprocessTask%5D%5Bvalue%5D=2863&amp;_list_mode=list">
+            <a href="/admin/supportprocess/domain/supportprocesstask/99999/task-protocol/list?filter%5B_page%5D=1&amp;filter%5B_per_page%5D=250&amp;filter%5B_sort_order%5D=ASC&amp;filter%5B_sort_by%5D=id&amp;filter%5BprocessTask%5D%5Bvalue%5D=99999&amp;_list_mode=list">
                 ID
             </a>
         </th>
@@ -36,7 +38,7 @@
     <tbody>
     <tr data-bc-protocol-bound="1" class="bc-protocol-copy-row" title="Клик: сохранить данные и перейти к списку приходов">
         <td class="sonata-ba-list-field sonata-ba-list-field-integer" objectid="1032997" style="text-align:center">
-            <a class="sonata-link-identifier" href="/admin/supportprocess/domain/supportprocesstask/2863/task-protocol/1032997/show">1&nbsp;032&nbsp;997</a>
+            <a class="sonata-link-identifier" href="/admin/supportprocess/domain/supportprocesstask/99999/task-protocol/1032997/show">1&nbsp;032&nbsp;997</a>
         </td>
         <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032997">Ошибка</td>
         <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032997">Новый платёж не может быть совершён раньше предыдущего</td>
@@ -50,7 +52,7 @@
     </tr>
     <tr data-bc-protocol-bound="1" class="bc-protocol-copy-row" title="Клик: сохранить данные и перейти к списку приходов">
         <td class="sonata-ba-list-field sonata-ba-list-field-integer" objectid="1032826" style="text-align:center">
-            <a class="sonata-link-identifier" href="/admin/supportprocess/domain/supportprocesstask/2863/task-protocol/1032826/show">1&nbsp;032&nbsp;826</a>
+            <a class="sonata-link-identifier" href="/admin/supportprocess/domain/supportprocesstask/99999/task-protocol/1032826/show">1&nbsp;032&nbsp;826</a>
         </td>
         <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032826">Успешно</td>
         <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032826">Приход на депозит</td>
@@ -64,7 +66,7 @@
     </tr>
     <tr data-bc-protocol-bound="1" class="bc-protocol-copy-row" title="Клик: сохранить данные и перейти к списку приходов">
         <td class="sonata-ba-list-field sonata-ba-list-field-integer" objectid="1032607" style="text-align:center">
-            <a class="sonata-link-identifier" href="/admin/supportprocess/domain/supportprocesstask/2863/task-protocol/1032607/show">1&nbsp;032&nbsp;607</a>
+            <a class="sonata-link-identifier" href="/admin/supportprocess/domain/supportprocesstask/99999/task-protocol/1032607/show">1&nbsp;032&nbsp;607</a>
         </td>
         <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032607">Ошибка</td>
         <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032607">Дата прихода не может быть меньше, чем дата выдачи кредита</td>
