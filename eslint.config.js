@@ -147,12 +147,16 @@ module.exports = [
     },
   },
   {
-    // Волна 5.1/5.2: эти два скрипта require()'ят lib/agis-core.js внутри Node-only ветки
+    // Волна 5.1/5.2/5.3: эти три скрипта require()'ят lib/agis-core.js внутри Node-only ветки
     // guard'а, чтобы получить ruMonthNumber/normalizeText/cellText для теста без дублирования
     // их логики (см. README.md "Тесты"). require НЕ добавлен в общий globals-блок
     // scripts/**/*.user.js выше — если он появится в production-пути любого из остальных
-    // 5 скриптов, это должно остаться ошибкой ESLint (no-undef), а не молча пройти.
-    files: ['scripts/agis-loan-info-navbar.user.js', 'scripts/agis-protocol-income-fill.user.js'],
+    // 4 скриптов, это должно остаться ошибкой ESLint (no-undef), а не молча пройти.
+    files: [
+      'scripts/agis-loan-info-navbar.user.js',
+      'scripts/agis-protocol-income-fill.user.js',
+      'scripts/agis-duplicate-income.user.js',
+    ],
     languageOptions: {
       globals: { require: 'readonly' },
     },
