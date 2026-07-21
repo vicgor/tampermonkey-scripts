@@ -1,0 +1,85 @@
+<!--
+  Реальный кусок страницы /admin/supportprocess/domain/supportprocesstask/<id>/task-protocol/list
+  AGIS, полученный из браузера пользователем репозитория и урезанный до 3 строк из ~20
+  реальных (лишние строки убраны, разметка не менялась) — см.
+  test/scripts/agis-protocol-income-fill.dom.test.js. Никаких персональных данных на этой
+  странице нет (только id протокола/займа, даты, суммы, статусы) — анонимизация не нужна;
+  единственная замена — id самой supportprocesstask (2863 → 99999, внутренний
+  идентификатор системы в URL, не персональные данные, но заменён для консистентности).
+
+  Реальная находка: на этой странице НЕТ колонки "Номер заказа" вообще — getHeaderMap()
+  ищет 'номер заказа' по всем th, но такого заголовка тут не существует, поэтому
+  colIndex.orderNumber всегда undefined на этой странице (см. ROADMAP.md).
+-->
+<!DOCTYPE html>
+<html>
+<body>
+
+<table class="table table-bordered table-striped table-hover sonata-ba-list">
+    <thead>
+    <tr class="sonata-ba-list-field-header">
+        <th class="sonata-ba-list-field-header-integer sonata-ba-list-field-header-order-desc sonata-ba-list-field-order-active" style="width: 5%; text-align: center;">
+            <a href="/admin/supportprocess/domain/supportprocesstask/99999/task-protocol/list?filter%5B_page%5D=1&amp;filter%5B_per_page%5D=250&amp;filter%5B_sort_order%5D=ASC&amp;filter%5B_sort_by%5D=id&amp;filter%5BprocessTask%5D%5Bvalue%5D=99999&amp;_list_mode=list">
+                ID
+            </a>
+        </th>
+        <th class="sonata-ba-list-field-header-string">Статус выполнения</th>
+        <th class="sonata-ba-list-field-header-string">Сообщение</th>
+        <th class="sonata-ba-list-field-header-string">ID займa</th>
+        <th class="sonata-ba-list-field-header-string">Статус займа</th>
+        <th class="sonata-ba-list-field-header-string">Дата возврата займа</th>
+        <th class="sonata-ba-list-field-header-string">Тип займа</th>
+        <th class="sonata-ba-list-field-header-string">Второй статус займа</th>
+        <th class="sonata-ba-list-field-header-string">Сумма прихода</th>
+        <th class="sonata-ba-list-field-header-string">Дата прихода</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    <tr data-bc-protocol-bound="1" class="bc-protocol-copy-row" title="Клик: сохранить данные и перейти к списку приходов">
+        <td class="sonata-ba-list-field sonata-ba-list-field-integer" objectid="1032997" style="text-align:center">
+            <a class="sonata-link-identifier" href="/admin/supportprocess/domain/supportprocesstask/99999/task-protocol/1032997/show">1&nbsp;032&nbsp;997</a>
+        </td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032997">Ошибка</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032997">Новый платёж не может быть совершён раньше предыдущего</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032997">32219437</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032997">2</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032997"></td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032997">PDL</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032997">0</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032997">3000</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032997">2026-07-20 15:54:49</td>
+    </tr>
+    <tr data-bc-protocol-bound="1" class="bc-protocol-copy-row" title="Клик: сохранить данные и перейти к списку приходов">
+        <td class="sonata-ba-list-field sonata-ba-list-field-integer" objectid="1032826" style="text-align:center">
+            <a class="sonata-link-identifier" href="/admin/supportprocess/domain/supportprocesstask/99999/task-protocol/1032826/show">1&nbsp;032&nbsp;826</a>
+        </td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032826">Успешно</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032826">Приход на депозит</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032826">31286785</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032826">3</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032826">2026-02-15 18:00:13</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032826">PDL</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032826">0</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032826">6200</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032826">2026-07-20 15:53:09</td>
+    </tr>
+    <tr data-bc-protocol-bound="1" class="bc-protocol-copy-row" title="Клик: сохранить данные и перейти к списку приходов">
+        <td class="sonata-ba-list-field sonata-ba-list-field-integer" objectid="1032607" style="text-align:center">
+            <a class="sonata-link-identifier" href="/admin/supportprocess/domain/supportprocesstask/99999/task-protocol/1032607/show">1&nbsp;032&nbsp;607</a>
+        </td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032607">Ошибка</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032607">Дата прихода не может быть меньше, чем дата выдачи кредита</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032607">32237706</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032607">2</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032607"></td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032607">IL</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032607">0</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032607">18765.17</td>
+        <td class="sonata-ba-list-field sonata-ba-list-field-string" objectid="1032607">2026-07-18 15:51:09</td>
+    </tr>
+    </tbody>
+</table>
+
+</body>
+</html>
