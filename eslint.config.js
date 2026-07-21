@@ -170,9 +170,10 @@ module.exports = [
     },
   },
   {
-    // scripts/validate-meta.js — Node CLI-тулинг (Волна 4.5), не userscript,
-    // поэтому не подпадает под files: ['scripts/**/*.user.js'] выше.
-    files: ['scripts/validate-meta.js'],
+    // scripts/validate-meta.js, scripts/check-version-bump.js — Node CLI-тулинг
+    // (Волна 4.5/4.3), не userscript'ы, поэтому не подпадают под
+    // files: ['scripts/**/*.user.js'] выше.
+    files: ['scripts/validate-meta.js', 'scripts/check-version-bump.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'commonjs',
