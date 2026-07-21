@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      5.3.2
+// @version      5.4.0
 // @description  Полноширинная строка под навбаром с информацией о займе и цветным статусом
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*
@@ -31,64 +31,11 @@
 (function () {
   'use strict';
 
-  // Тестовый экспорт для vitest (см. test/scripts/agis-loan-info-navbar.test.js) —
-  // до window-guard'а ниже, т.к. в Node window не определён вообще. formatDateDDMMYY/
-  // applyDateFormatting (зависят от ruMonthNumber ядра) и statusColor (зависит от
-  // STATUS_*-множеств, объявленных ниже) сюда не входят — не самодостаточны при
-  // раннем return. В Tampermonkey module не определён — блок не выполняется.
-  if (typeof process !== 'undefined' && process.versions?.node && typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-      normalizeText,
-      pad2,
-      toTwoDigitYear,
-      isValidDateParts,
-      buildShortDate,
-      extractValue,
-      compactData,
-      hasUsefulData,
-    };
-    return;
-  }
-
-  if (!window.__AGIS_CORE__) {
-    console.error('[agis:loan-info] agis-core.js не загружен (@require не сработал)');
-    return;
-  }
-
-  const {
-    debounce,
-    cleanupRoute: coreCleanupRoute,
-    cleanup,
-    storageGet,
-    storageSetDebounced,
-    waitForElement,
-    api,
-    onUrlChange,
-    createRouteTokenController,
-    ruMonthNumber,
-  } = window.__AGIS_CORE__;
-
-  // Стандарт репо: SCRIPT_NS = agis:<feature> (для лога и storage), DOM_NS — без двоеточия (для CSS/id).
-  const SCRIPT_NS = 'agis:loan-info';
-  const DOM_NS = 'agis-loan-info';
-  // BAR_ID остаётся в прежнем виде — не трогаем CSS-селекторы, которые могут быть в коде.
-  const BAR_ID = 'cs-loan-bar';
-  // Fallback-цепочка: пробуем селекторы по очереди, возвращаем первый найденный
-  const NAVBAR_SELECTORS = ['.navbar-static-top', '.top-navbar', 'header.navbar', '#content'];
-  const CACHE_TTL = 5 * 60 * 1000;
-  // v45 — bump вместе со сменой префикса ключа кэша (SCRIPT_NAME → SCRIPT_NS).
-  // Старые ключи `CreditSmileLoanInfo:*:v44` останутся висеть в GM-storage как мёртвый балласт,
-  // но пользователь не почувствует — TTL всего 5 минут, кэш наполнится заново при первом визите.
-  const CACHE_VERSION = 'v45';
-  const WAIT_TIMEOUT = 20000;
-
-  const routeTokenController = createRouteTokenController();
-  let lastRenderSignature = '';
-
-  // Ссылка на функцию отключения единственного table-observerа, чтобы чистить при cleanupRoute.
-  // Не входит в общий observers ядра (см. templates/example-consumer.user.js, паттерн stopExtraObserver).
-  let stopTableObserver = null;
-
+  // Множества и ruMonthNumber вынесены сюда (до guard'а ниже), т.к. statusColor/
+  // formatDateDDMMYY читают их по замыканию — если guard вернёт управление раньше,
+  // чем эти const/let инициализированы, вызов экспортированной функции упадёт в TDZ.
+  // Сами функции (getRowCell, parseDoc и т.д. ниже по файлу) сюда переносить не нужно —
+  // function-объявления поднимаются целиком независимо от места в файле.
   const STATUS_RED = new Set([
     'просроченный',
     'аннулирован',
@@ -114,6 +61,71 @@
     'ожидание суммы от клиента',
   ]);
   const STATUS_GREEN = new Set(['активный кредит', 'продлен', 'в работе коллектора']);
+  let ruMonthNumber;
+
+  // Тестовый экспорт для vitest (см. test/scripts/agis-loan-info-navbar.test.js и
+  // test/scripts/agis-loan-info-navbar.dom.test.js) — до window-guard'а ниже, т.к. в Node
+  // window не определён вообще. ruMonthNumber в тестовом окружении берём напрямую из
+  // lib/agis-core.js (require живой только в этой Node-ветке — в Tampermonkey process/module
+  // не определены, ветка не выполняется), чтобы не дублировать её логику.
+  if (typeof process !== 'undefined' && process.versions?.node && typeof module !== 'undefined' && module.exports) {
+    ruMonthNumber = require('../lib/agis-core.js').ruMonthNumber;
+    module.exports = {
+      normalizeText,
+      pad2,
+      toTwoDigitYear,
+      isValidDateParts,
+      buildShortDate,
+      extractValue,
+      compactData,
+      hasUsefulData,
+      getRowCell,
+      getRowValue,
+      formatDateDDMMYY,
+      applyDateFormatting,
+      parseDoc,
+      statusColor,
+    };
+    return;
+  }
+
+  if (!window.__AGIS_CORE__) {
+    console.error('[agis:loan-info] agis-core.js не загружен (@require не сработал)');
+    return;
+  }
+
+  const {
+    debounce,
+    cleanupRoute: coreCleanupRoute,
+    cleanup,
+    storageGet,
+    storageSetDebounced,
+    waitForElement,
+    api,
+    onUrlChange,
+    createRouteTokenController,
+  } = window.__AGIS_CORE__;
+  ruMonthNumber = window.__AGIS_CORE__.ruMonthNumber;
+
+  // Стандарт репо: SCRIPT_NS = agis:<feature> (для лога и storage), DOM_NS — без двоеточия (для CSS/id).
+  const SCRIPT_NS = 'agis:loan-info';
+  const DOM_NS = 'agis-loan-info';
+  // BAR_ID остаётся в прежнем виде — не трогаем CSS-селекторы, которые могут быть в коде.
+  const BAR_ID = 'cs-loan-bar';
+  // Fallback-цепочка: пробуем селекторы по очереди, возвращаем первый найденный
+  const NAVBAR_SELECTORS = ['.navbar-static-top', '.top-navbar', 'header.navbar', '#content'];
+  const CACHE_TTL = 5 * 60 * 1000;
+  // v46 — бамп из-за фикса parseLoanContextFromUrl (loan-extended и другие секции теперь
+  // распознаются). Формат ключа не менялся, старые v45-ключи просто протухнут по TTL.
+  const CACHE_VERSION = 'v46';
+  const WAIT_TIMEOUT = 20000;
+
+  const routeTokenController = createRouteTokenController();
+  let lastRenderSignature = '';
+
+  // Ссылка на функцию отключения единственного table-observerа, чтобы чистить при cleanupRoute.
+  // Не входит в общий observers ядра (см. templates/example-consumer.user.js, паттерн stopExtraObserver).
+  let stopTableObserver = null;
 
   // --- Утилиты ---
 
@@ -231,9 +243,12 @@
   function parseLoanContextFromUrl() {
     try {
       const url = new URL(location.href);
-      const match = url.pathname.match(
-        /\/admin\/agis2\/core\/(loan(?:-(?:overdue|judicial-recovery|collection-agency))?)\/(\d+)(?:\/|$)/,
-      );
+      // Раньше — жёсткий whitelist (loan/loan-overdue/loan-judicial-recovery/loan-collection-agency),
+      // из-за которого навбар не показывался на loan-extended и других вариантах секций (баг,
+      // найден вручную на /loan-extended/<id>/edit). @match уже пускает скрипт на любой
+      // /admin/agis2/core/loan*, так что здесь тоже принимаем любой суффикс через дефис —
+      // цифровой id после секции всё равно обязателен, случайные совпадения маловероятны.
+      const match = url.pathname.match(/\/admin\/agis2\/core\/(loan(?:-[a-z]+)*)\/(\d+)(?:\/|$)/);
       if (!match) return null;
       return {
         host: url.host,
