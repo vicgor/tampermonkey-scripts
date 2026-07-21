@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - очистка вставки в поля суммы
 // @namespace    agis.paste.cleaner
-// @version      1.9
+// @version      1.10
 // @description  Очищает вставку в полях суммы: оставляет только цифры, точки и запятые; первый и последний символ — цифры.
 // @match        https://agis.credit7.ru/*/loan*/*/create
 // @match        https://agis.creditsmile.ru/*/loan*/*/create
@@ -10,6 +10,10 @@
 // @match        https://agis.credit365.ru/*/loan*/*/create
 // @match        https://agis.berrycash.ru/*/loan*/*/create
 // @match        https://agis.moneymania.ru/*/loan*/*/create
+// @match        https://agis.vashcash.ru/*/loan*/*/create
+// @match        https://agis.ikracredit.ru/*/loan*/*/create
+// @match        https://agis.zaimix.ru/*/loan*/*/create
+// @match        https://agis.finrook.ru/*/loan*/*/create
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-paste-cleaner-amount.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-paste-cleaner-amount.user.js
 // @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.0.0/lib/agis-core.js#sha256=VD6capqdxkgjVYVTXPdNDDIQtmrPhrnu4CN18A4CO1A=

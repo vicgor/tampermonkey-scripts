@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - дублировать приход
 // @namespace    agis.duplicate.income
-// @version      3.2.2
+// @version      3.3.0
 // @description  Клик по строке прихода → открыть форму создания и автозаполнить (дата, шлюз, внешний ID, сумма). Ручное подтверждение.
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan*/*/income/*
@@ -10,6 +10,10 @@
 // @match        https://agis.belkacredit.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.credit7.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.credit365.ru/admin/agis2/core/loan*/*/income/*
+// @match        https://agis.vashcash.ru/admin/agis2/core/loan*/*/income/*
+// @match        https://agis.ikracredit.ru/admin/agis2/core/loan*/*/income/*
+// @match        https://agis.zaimix.ru/admin/agis2/core/loan*/*/income/*
+// @match        https://agis.finrook.ru/admin/agis2/core/loan*/*/income/*
 // @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.3.0/lib/agis-core.js#sha256=I5eLTR/TbTGLxg3Mj2f8pM/oBCcbJ6BLSNQxveEcSFQ=
 // @run-at       document-start
 // @sandbox      DOM
