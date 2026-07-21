@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      5.3.3
+// @version      5.4.0
 // @description  Полноширинная строка под навбаром с информацией о займе и цветным статусом
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*
@@ -115,10 +115,9 @@
   // Fallback-цепочка: пробуем селекторы по очереди, возвращаем первый найденный
   const NAVBAR_SELECTORS = ['.navbar-static-top', '.top-navbar', 'header.navbar', '#content'];
   const CACHE_TTL = 5 * 60 * 1000;
-  // v45 — bump вместе со сменой префикса ключа кэша (SCRIPT_NAME → SCRIPT_NS).
-  // Старые ключи `CreditSmileLoanInfo:*:v44` останутся висеть в GM-storage как мёртвый балласт,
-  // но пользователь не почувствует — TTL всего 5 минут, кэш наполнится заново при первом визите.
-  const CACHE_VERSION = 'v45';
+  // v46 — бамп из-за фикса parseLoanContextFromUrl (loan-extended и другие секции теперь
+  // распознаются). Формат ключа не менялся, старые v45-ключи просто протухнут по TTL.
+  const CACHE_VERSION = 'v46';
   const WAIT_TIMEOUT = 20000;
 
   const routeTokenController = createRouteTokenController();
@@ -244,9 +243,12 @@
   function parseLoanContextFromUrl() {
     try {
       const url = new URL(location.href);
-      const match = url.pathname.match(
-        /\/admin\/agis2\/core\/(loan(?:-(?:overdue|judicial-recovery|collection-agency))?)\/(\d+)(?:\/|$)/,
-      );
+      // Раньше — жёсткий whitelist (loan/loan-overdue/loan-judicial-recovery/loan-collection-agency),
+      // из-за которого навбар не показывался на loan-extended и других вариантах секций (баг,
+      // найден вручную на /loan-extended/<id>/edit). @match уже пускает скрипт на любой
+      // /admin/agis2/core/loan*, так что здесь тоже принимаем любой суффикс через дефис —
+      // цифровой id после секции всё равно обязателен, случайные совпадения маловероятны.
+      const match = url.pathname.match(/\/admin\/agis2\/core\/(loan(?:-[a-z]+)*)\/(\d+)(?:\/|$)/);
       if (!match) return null;
       return {
         host: url.host,
