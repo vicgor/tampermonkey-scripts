@@ -311,6 +311,8 @@ const { waitForElement, onUrlChange, api, showBanner } = window.__AGIS_CORE__;
 | `api.getJson(url, headers)` / `api.postJson(url, body, headers)` / `api.getHtml(url, headers)` | Запросы через `httpRequest`, обходят CSP сайта | `GM_xmlhttpRequest` |
 | `registerDebugToggle(scriptNs, debugKey)` | Регистрирует пункт меню Tampermonkey для debug-логов, возвращает `{ value }` (async, резолвится после чтения хранилища) | `GM_getValue`, `GM_setValue`, `GM_registerMenuCommand` |
 | `ruMonthNumber(rawMonthText)` | Парсит русское название месяца → `'01'..'12'` | — |
+| `normalizeText(value)` | Схлопывает пробелы (включая nbsp) и обрезает края | — |
+| `cellText(td)` | `normalizeText(td.textContent)`, `''` для `null`/`undefined` | — |
 
 ### Ключевые правила при адаптации
 

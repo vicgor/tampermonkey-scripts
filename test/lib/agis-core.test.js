@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ruMonthNumber } from '../../lib/agis-core.js';
+import { ruMonthNumber, normalizeText, cellText } from '../../lib/agis-core.js';
 
 describe('ruMonthNumber', () => {
   it('распознаёт полное название месяца', () => {
@@ -37,5 +37,41 @@ describe('ruMonthNumber', () => {
     expect(ruMonthNumber('')).toBeNull();
     expect(ruMonthNumber(null)).toBeNull();
     expect(ruMonthNumber(undefined)).toBeNull();
+  });
+});
+
+// Волна 5: перенесены из agis-loan-info-navbar.user.js/agis-protocol-income-fill.user.js
+// (обе версии были буквально идентичны) и заинлайненного варианта в
+// agis-duplicate-income.user.js — см. ROADMAP.md.
+describe('normalizeText', () => {
+  it('схлопывает повторяющиеся пробелы/табы/переводы строк и обрезает края', () => {
+    expect(normalizeText('a   b\tc\n\nd')).toBe('a b c d');
+    expect(normalizeText('  x  ')).toBe('x');
+  });
+
+  it('nbsp (\\u00a0) тоже схлопывается — \\s в JS уже покрывает его', () => {
+    const nbsp = String.fromCharCode(0xa0);
+    expect(normalizeText(`a${nbsp}b`)).toBe('a b');
+  });
+
+  it('пустой/отсутствующий ввод даёт пустую строку', () => {
+    expect(normalizeText('')).toBe('');
+    expect(normalizeText(null)).toBe('');
+    expect(normalizeText(undefined)).toBe('');
+  });
+
+  it('приводит нестроковые значения через String()', () => {
+    expect(normalizeText(42)).toBe('42');
+  });
+});
+
+describe('cellText', () => {
+  it('нормализует textContent переданного узла', () => {
+    expect(cellText({ textContent: '  x   y  ' })).toBe('x y');
+  });
+
+  it('null/undefined даёт пустую строку, не исключение', () => {
+    expect(cellText(null)).toBe('');
+    expect(cellText(undefined)).toBe('');
   });
 });
