@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  normalizeText,
   pad2,
   toTwoDigitYear,
   isValidDateParts,
@@ -13,15 +12,8 @@ import {
   statusColor,
 } from '../../scripts/agis-loan-info-navbar.user.js';
 
-describe('normalizeText', () => {
-  it('схлопывает пробелы/табы и обрезает края', () => {
-    expect(normalizeText('a   b\tc')).toBe('a b c');
-  });
-
-  it('пустой/отсутствующий ввод даёт пустую строку', () => {
-    expect(normalizeText(null)).toBe('');
-  });
-});
+// normalizeText больше не экспортируется этим файлом — теперь из lib/agis-core.js,
+// тестируется один раз в test/lib/agis-core.test.js (см. ROADMAP.md).
 
 describe('pad2', () => {
   it('добавляет ведущий ноль для однозначных чисел', () => {

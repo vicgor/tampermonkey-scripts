@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - дублировать приход
 // @namespace    agis.duplicate.income
-// @version      3.2
+// @version      3.2.1
 // @description  Клик по строке прихода → открыть форму создания и автозаполнить (дата, шлюз, внешний ID, сумма). Ручное подтверждение.
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan*/*/income/*
@@ -10,7 +10,7 @@
 // @match        https://agis.belkacredit.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.credit7.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.credit365.ru/admin/agis2/core/loan*/*/income/*
-// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.2.0/lib/agis-core.js#sha256=dV8YKJZ5amc3KVhAYRg7WBQV/dUGFM4UwLKXLN8RZRg=
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.3.0/lib/agis-core.js#sha256=I5eLTR/TbTGLxg3Mj2f8pM/oBCcbJ6BLSNQxveEcSFQ=
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_setValue
@@ -49,6 +49,7 @@
     storageDelete,
     showBanner,
     ruMonthNumber,
+    cellText,
   } = window.__AGIS_CORE__;
 
   const SCRIPT_NS = 'agis:duplicate-income';
@@ -128,9 +129,8 @@
     return GATEWAY_MAP[raw.toLowerCase()] ?? raw;
   }
 
-  function cellText(td) {
-    return td ? td.textContent.replace(/\s+/g, ' ').trim() : '';
-  }
+  // cellText теперь из ядра (window.__AGIS_CORE__, деструктурирован выше) — локальная
+  // копия убрана, см. ROADMAP.md "Устранить дублирование cellText/normalizeText".
 
   function extractTotal(text) {
     const m = text.match(/Итого\s*:?\s*([\d\s.,]+)/i);

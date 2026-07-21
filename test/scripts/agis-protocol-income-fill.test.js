@@ -1,22 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeText, parseAmount } from '../../scripts/agis-protocol-income-fill.user.js';
+import { parseAmount } from '../../scripts/agis-protocol-income-fill.user.js';
 
-const NBSP = '\u00a0';
-
-describe('normalizeText', () => {
-  it('схлопывает повторяющиеся пробелы/табы и обрезает края', () => {
-    expect(normalizeText('a   b\tc')).toBe('a b c');
-  });
-
-  it('заменяет nbsp на обычный пробел', () => {
-    expect(normalizeText(`a${NBSP}b`)).toBe('a b');
-  });
-
-  it('пустой/отсутствующий ввод даёт пустую строку', () => {
-    expect(normalizeText(null)).toBe('');
-    expect(normalizeText(undefined)).toBe('');
-  });
-});
+// normalizeText больше не экспортируется этим файлом — теперь из lib/agis-core.js,
+// тестируется один раз в test/lib/agis-core.test.js (см. ROADMAP.md).
 
 describe('parseAmount', () => {
   it('извлекает сумму с разделителем тысяч и десятичной точкой', () => {

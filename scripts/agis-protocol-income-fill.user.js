@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - вставка прихода из протокола
 // @namespace    agis.protocol.income.fill
-// @version      2.1.1
+// @version      2.1.2
 // @description  Клик по строке протокола сохраняет данные; автопереход на список приходов нужного займа; на странице создания прихода кнопка вставки заполняет форму.
 // @match        https://agis.volgazaim.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*/income/list*
@@ -40,7 +40,7 @@
 // @match        https://agis.credit365.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-protocol-income-fill.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-protocol-income-fill.user.js
-// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.1.0/lib/agis-core.js#sha256=mrgmLBDYkBLsL/GI0rVsuHT8V8QjzhXSEneovVOIL4Y=
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.3.0/lib/agis-core.js#sha256=I5eLTR/TbTGLxg3Mj2f8pM/oBCcbJ6BLSNQxveEcSFQ=
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_setValue
@@ -52,11 +52,23 @@
 (() => {
   'use strict';
 
+  // normalizeText/cellText приходят из ядра (window.__AGIS_CORE__), не объявлены здесь
+  // локально — let вместо function, значение назначается в одной из двух веток ниже.
+  let normalizeText;
+  let cellText;
+
   // Тестовый экспорт для vitest (см. test/scripts/agis-protocol-income-fill.test.js) —
-  // до window-guard'а ниже, т.к. в Node window не определён вообще. В Tampermonkey
-  // module не определён — блок не выполняется, поведение не меняется.
+  // до window-guard'а ниже, т.к. в Node window не определён вообще. normalizeText/cellText
+  // в тестовом окружении берём напрямую из lib/agis-core.js (require живой только в этой
+  // Node-ветке — в Tampermonkey process/module не определены, ветка не выполняется), чтобы
+  // не дублировать их логику. normalizeText/cellText не входят в module.exports ниже — они
+  // больше не принадлежат этому файлу, тестируются один раз в test/lib/agis-core.test.js
+  // (см. ROADMAP.md, устранение дублирования cellText/normalizeText).
   if (typeof process !== 'undefined' && process.versions?.node && typeof module !== 'undefined' && module.exports) {
-    module.exports = { normalizeText, parseAmount };
+    const core = require('../lib/agis-core.js');
+    normalizeText = core.normalizeText;
+    cellText = core.cellText;
+    module.exports = { parseAmount };
     return;
   }
 
@@ -77,6 +89,8 @@
     showBanner,
     registerDebugToggle,
   } = window.__AGIS_CORE__;
+  normalizeText = window.__AGIS_CORE__.normalizeText;
+  cellText = window.__AGIS_CORE__.cellText;
 
   const SCRIPT_NS = 'agis:protocol-income';
   // ID для DOM-элементов и CSS-классов (не содержит двоеточия, чтобы не ломать CSS-селекторы).
@@ -129,12 +143,8 @@
     }
   }
 
-  function normalizeText(value) {
-    return String(value || '')
-      .replace(/\u00a0/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
+  // normalizeText/cellText теперь из ядра (window.__AGIS_CORE__, см. guard выше) —
+  // локальные копии убраны, см. ROADMAP.md "Устранить дублирование cellText/normalizeText".
 
   function parseAmount(value) {
     const text = normalizeText(value);
@@ -147,10 +157,6 @@
     // Работает только на страницах income/list и income/create.
     const match = location.pathname.match(/\/(?:loan|loan-overdue)\/(\d+)\/income\/(?:list|create)\b/i);
     return match ? match[1] : '';
-  }
-
-  function cellText(td) {
-    return td ? normalizeText(td.textContent) : '';
   }
 
   function getHeaderMap(table) {
