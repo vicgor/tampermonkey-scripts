@@ -18,6 +18,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Полная история (не shallow depth: 1 по умолчанию) — нужна scripts/check-version-bump.js
+          # для git merge-base с базовой веткой PR, которая может быть заметно старше HEAD.
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -39,3 +43,6 @@ jobs:
 
       - name: Метаблок-валидатор
         run: npm run validate-meta
+
+      - name: Проверка бампа @version
+        run: npm run check-version-bump

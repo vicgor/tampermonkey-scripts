@@ -48,6 +48,7 @@ npm run lint           # ESLint: метаблок, инварианты карк
 npm run format         # Prettier --write (2 пробела, одинарные кавычки)
 npm run format:check   # Prettier --check, без изменений — для проверки перед коммитом
 npm run validate-meta  # scripts/validate-meta.js — @grant/@connect/@namespace/@match (см. ниже)
+npm run check-version-bump  # scripts/check-version-bump.js — @version бампнут, если файл менялся (только в PR-контексте CI)
 ```
 
 Конфиг ESLint (`eslint.config.js`) проверяет:
@@ -72,18 +73,27 @@ npm run validate-meta  # scripts/validate-meta.js — @grant/@connect/@namespace
   Tampermonkey (`http://tampermonkey.net/`);
 - **`@match`**: не открыт на любой хост (`*://*/*` и т.п.).
 
-Что осознанно не проверяется (см. ROADMAP.md): бамп `@version` при изменении
-файла (нужен git diff против базовой ветки — отдельная задача) и обоснованность
-`@sandbox`/`@run-at` — слишком эвристично для надёжного статического анализа.
+Бамп `@version` при изменении файла проверяет отдельный скрипт —
+`scripts/check-version-bump.js` (`npm run check-version-bump`): если
+`scripts/*.user.js` изменился между базовой веткой PR и HEAD, а строка
+`@version` в нём — нет, это `ERROR` (см. "Версионирование" ниже — даже
+патч-правка типа/комментария требует бампа). Работает только в PR-контексте
+GitHub Actions (нужен `GITHUB_BASE_REF` и полная git-история — `ci.yml`
+использует `fetch-depth: 0`); при прямом push в `main` или локальном запуске
+молча пропускает проверку, не блокируя `npm run lint`.
+
+Что осознанно не проверяется (см. ROADMAP.md): обоснованность `@sandbox`/`@run-at`
+— слишком эвристично для надёжного статического анализа.
 
 Prettier — 2 пробела, одинарные кавычки, точка с запятой, ширина строки 120.
 Не форматирует `*.md` (таблицы и кириллица в них форматируются Prettier не всегда
 аккуратно) — только `.js`/`.user.js`.
 
 **CI** (`.github/workflows/ci.yml`) гоняет `npm run lint`, `npm run format:check`,
-`npm test` и `npm run validate-meta` на каждый PR и на push в `main` — то же
-самое, что локально, без отдельного конфига. Если CI зелёный, дополнительно
-гонять линтер/тесты перед мержем не нужно.
+`npm test`, `npm run validate-meta` и `npm run check-version-bump` на каждый PR
+и на push в `main` — то же самое, что локально (кроме бампа `@version`, который
+имеет смысл только в PR-контексте), без отдельного конфига. Если CI зелёный,
+дополнительно гонять линтер/тесты перед мержем не нужно.
 
 ---
 
