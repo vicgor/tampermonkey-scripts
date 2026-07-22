@@ -46,6 +46,12 @@ describe('resolveGateway', () => {
     expect(resolveGateway('finstar')).toBe('СИАБ-Банк');
   });
 
+  it('ФИНСТАР (заглавной кириллицей, из списка приходов) тоже резолвится в СИАБ-Банк', () => {
+    // Реальная страница AGIS ("Платежный шлюз" в списке приходов) отдаёт этот вариант
+    // отдельно от латинского "finstar" — нашли по реальному HTML со страницы.
+    expect(resolveGateway('ФИНСТАР')).toBe('СИАБ-Банк');
+  });
+
   it('неизвестный шлюз возвращает исходную строку как есть', () => {
     expect(resolveGateway('SomeRandomGateway')).toBe('SomeRandomGateway');
   });

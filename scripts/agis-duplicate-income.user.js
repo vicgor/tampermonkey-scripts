@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - дублировать приход
 // @namespace    agis.duplicate.income
-// @version      3.2.2
+// @version      3.3.0
 // @description  Клик по строке прихода → открыть форму создания и автозаполнить (дата, шлюз, внешний ID, сумма). Ручное подтверждение.
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan*/*/income/*
@@ -43,6 +43,7 @@
     elecsnet: 'Elecsnet',
     mi_elecsnet: 'Elecsnet',
     finstar: 'СИАБ-Банк', // AGIS отдаёт латиницей
+    финстар: 'СИАБ-Банк', // в списке приходов (Платежный шлюз) — заглавной кириллицей "ФИНСТАР"
     mi_siab: 'СИАБ-Банк',
     'сиаб-банк': 'СИАБ-Банк',
     'ткб банк': 'ТКБ Банк',
