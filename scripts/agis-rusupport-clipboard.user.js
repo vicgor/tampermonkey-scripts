@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS: вставка RUSUPPORT в содержание заметки
 // @namespace    agis.rusupport.clipboard
-// @version      2.2.0
+// @version      2.3.0
 // @description  Вставляет текст из буфера обмена в поле "Содержание" при создании заметки к займу, только если текст содержит слово RUSUPPORT.
 // @author       vicgor
 // @match        https://agis.volgazaim.ru/admin/*/loan*/*/loannote/create*
@@ -11,6 +11,10 @@
 // @match        https://agis.belkacredit.ru/admin/*/loan*/*/loannote/create*
 // @match        https://agis.credit7.ru/admin/*/loan*/*/loannote/create*
 // @match        https://agis.credit365.ru/admin/*/loan*/*/loannote/create*
+// @match        https://agis.vashcash.ru/admin/*/loan*/*/loannote/create*
+// @match        https://agis.ikracredit.ru/admin/*/loan*/*/loannote/create*
+// @match        https://agis.zaimix.ru/admin/*/loan*/*/loannote/create*
+// @match        https://agis.finrook.ru/admin/*/loan*/*/loannote/create*
 // @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.0.0/lib/agis-core.js#sha256=VD6capqdxkgjVYVTXPdNDDIQtmrPhrnu4CN18A4CO1A=
 // @run-at       document-start
 // @sandbox      DOM

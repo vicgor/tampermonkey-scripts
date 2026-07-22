@@ -10,6 +10,10 @@
 // @match        https://agis.belkacredit.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.credit7.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.credit365.ru/admin/agis2/core/loan*/*/income/*
+// @match        https://agis.vashcash.ru/admin/agis2/core/loan*/*/income/*
+// @match        https://agis.ikracredit.ru/admin/agis2/core/loan*/*/income/*
+// @match        https://agis.zaimix.ru/admin/agis2/core/loan*/*/income/*
+// @match        https://agis.finrook.ru/admin/agis2/core/loan*/*/income/*
 // @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.3.0/lib/agis-core.js#sha256=I5eLTR/TbTGLxg3Mj2f8pM/oBCcbJ6BLSNQxveEcSFQ=
 // @run-at       document-start
 // @sandbox      DOM

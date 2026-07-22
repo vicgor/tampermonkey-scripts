@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS автозаполнение из Google Sheets
 // @namespace    agis.income.googlesheet
-// @version      4.5
+// @version      4.6
 // @description  Автозаполнение формы AGIS из Google Таблицы (CSV Publish). Запрос через GM_xmlhttpRequest (обходит CSP).
 // @match        https://agis.creditsmile.ru/*/loan*/*/income/create
 // @match        https://agis.belkacredit.ru/*/loan*/*/income/create
@@ -10,6 +10,10 @@
 // @match        https://agis.moneymania.ru/*/loan*/*/income/create
 // @match        https://agis.credit7.ru/*/loan*/*/income/create
 // @match        https://agis.credit365.ru/*/loan*/*/income/create
+// @match        https://agis.vashcash.ru/*/loan*/*/income/create
+// @match        https://agis.ikracredit.ru/*/loan*/*/income/create
+// @match        https://agis.zaimix.ru/*/loan*/*/income/create
+// @match        https://agis.finrook.ru/*/loan*/*/income/create
 // @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.1.0/lib/agis-core.js#sha256=mrgmLBDYkBLsL/GI0rVsuHT8V8QjzhXSEneovVOIL4Y=
 // @run-at       document-start
 // @sandbox      DOM

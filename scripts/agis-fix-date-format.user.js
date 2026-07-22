@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - исправление формата даты
 // @namespace    agis.fix.date.format
-// @version      1.0
+// @version      1.1
 // @description  Исправляет ввод даты в полях типа date/datetime-local: при вводе через клавиатуру или вставку преобразует форматы ДД.ММ.ГГГГ и ГГГГ-ММ-ДД в значение, принимаемое браузером (ГГГГ-ММ-ДД для date, ГГГГ-ММ-ДДTHH:MM для datetime-local).
 // @match        https://agis.credit7.ru/*/loan*/*/create
 // @match        https://agis.creditsmile.ru/*/loan*/*/create
@@ -10,6 +10,10 @@
 // @match        https://agis.credit365.ru/*/loan*/*/create
 // @match        https://agis.berrycash.ru/*/loan*/*/create
 // @match        https://agis.moneymania.ru/*/loan*/*/create
+// @match        https://agis.vashcash.ru/*/loan*/*/create
+// @match        https://agis.ikracredit.ru/*/loan*/*/create
+// @match        https://agis.zaimix.ru/*/loan*/*/create
+// @match        https://agis.finrook.ru/*/loan*/*/create
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-fix-date-format.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-fix-date-format.user.js
 // @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.0.0/lib/agis-core.js#sha256=VD6capqdxkgjVYVTXPdNDDIQtmrPhrnu4CN18A4CO1A=

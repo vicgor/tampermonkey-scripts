@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - вставка прихода из протокола
 // @namespace    agis.protocol.income.fill
-// @version      2.1.2
+// @version      2.2.0
 // @description  Клик по строке протокола сохраняет данные; автопереход на список приходов нужного займа; на странице создания прихода кнопка вставки заполняет форму.
 // @match        https://agis.volgazaim.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*/income/list*
@@ -38,6 +38,26 @@
 // @match        https://agis.credit365.ru/admin/agis2/core/loan/*/income/create*
 // @match        https://agis.credit365.ru/admin/agis2/core/loan-overdue/*/income/list*
 // @match        https://agis.credit365.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.vashcash.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
+// @match        https://agis.vashcash.ru/admin/agis2/core/loan/*/income/list*
+// @match        https://agis.vashcash.ru/admin/agis2/core/loan/*/income/create*
+// @match        https://agis.vashcash.ru/admin/agis2/core/loan-overdue/*/income/list*
+// @match        https://agis.vashcash.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.ikracredit.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
+// @match        https://agis.ikracredit.ru/admin/agis2/core/loan/*/income/list*
+// @match        https://agis.ikracredit.ru/admin/agis2/core/loan/*/income/create*
+// @match        https://agis.ikracredit.ru/admin/agis2/core/loan-overdue/*/income/list*
+// @match        https://agis.ikracredit.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.zaimix.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
+// @match        https://agis.zaimix.ru/admin/agis2/core/loan/*/income/list*
+// @match        https://agis.zaimix.ru/admin/agis2/core/loan/*/income/create*
+// @match        https://agis.zaimix.ru/admin/agis2/core/loan-overdue/*/income/list*
+// @match        https://agis.zaimix.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.finrook.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
+// @match        https://agis.finrook.ru/admin/agis2/core/loan/*/income/list*
+// @match        https://agis.finrook.ru/admin/agis2/core/loan/*/income/create*
+// @match        https://agis.finrook.ru/admin/agis2/core/loan-overdue/*/income/list*
+// @match        https://agis.finrook.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-protocol-income-fill.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-protocol-income-fill.user.js
 // @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.3.0/lib/agis-core.js#sha256=I5eLTR/TbTGLxg3Mj2f8pM/oBCcbJ6BLSNQxveEcSFQ=
