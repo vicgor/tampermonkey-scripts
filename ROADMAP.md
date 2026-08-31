@@ -29,9 +29,16 @@ SRI-хеш (это уже не «канон на бумаге»); все скр�
 | `agis-linkify-loan-note` | 3.3 | v1.0.0 | Волна 2 (PR #15), debug-toggle await-фикс (PR #21). +4 домена (PR #38) |
 | `agis-rusupport-clipboard` | 2.3.0 | v1.0.0 | Волна 2 (PR #16), debug-toggle await-фикс (PR #21). +4 домена (PR #38) |
 | `agis-fix-date-format` | 1.1 | v1.0.0 | Добавлен позже, вне исходных волн — исправляет ввод даты в полях `date`/`datetime-local`. +4 домена (PR #38) |
+| `agis-deposit-refund` | 2.1.0 | v1.4.0 | Добавлен вне волн как автономный скрипт (1.3.0), мигрирован на ядро в 2.0.0 — свои `waitForElement`/storage/URL-observer заменены на `waitForCondition` (новое в ядре v1.4.0), `storage*`, `onUrlChange`, `showBanner`, `registerDebugToggle`, route-токены. Покрыт unit-тестами (18). В 2.1.0 `@match` расширён до всех 11 доменов — см. «Оставшиеся расхождения» |
 
 **Оставшиеся расхождения:**
 
+- `agis-deposit-refund` с 2.1.0 работает на всех 11 доменах (канон выполнен), но вручную
+  проверен только на `agis.moneymania.ru`. Решение осознанное: поиск полей идёт скорингом
+  подписей, а не селекторами конкретного бренда; при несовпадении скрипт не заполняет
+  поля, а показывает баннер об ошибке и пишет warn в Console. Отправка формы всегда
+  ручная, поэтому максимальный риск на непроверенном бренде — частично заполненная форма,
+  которую оператор видит до отправки. Smoke-test на остальных 10 брендах — открытая задача.
 - Волна 3 завершена — см. ниже.
 - README запрещает `setInterval`-поллинг для ожидания DOM; `setInterval` внутри `onUrlChange`-реализаций (canon и `lib/agis-core.js`) — не в счёт, это осознанный fallback-поллинг URL раз в секунду на случай пропущенного `pushState`/`popstate`, а не ожидание появления элемента.
 
@@ -279,7 +286,7 @@ migration-логов) в ходе ручной browser-проверки и вн�
 
 ## Ссылки
 
-- Общее ядро: [`lib/agis-core.js`](./lib/agis-core.js)
+- Общее ядро: [`lib/agis-core.js`](./lib/agis-core.js) — текущий тег `v1.4.0` (добавлен `waitForCondition`)
 - Живой пример потребителя: [`templates/example-consumer.user.js`](./templates/example-consumer.user.js)
 - Стандарты и чек-лист: [`README.md`](./README.md)
 - Policy AI-ассистента: [`space-prompt.md`](./space-prompt.md)
