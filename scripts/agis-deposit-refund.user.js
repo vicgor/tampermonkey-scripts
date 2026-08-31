@@ -1,9 +1,19 @@
 // ==UserScript==
 // @name         AGIS - возврат депозита
 // @namespace    agis.deposit.refund
-// @version      2.0.0
+// @version      2.1.0
 // @description  Находит «ДС на счету» на странице займа → кнопка «Вернуть депозит» → открывает форму транзакции и автозаполняет сумму, направление OUT и тип «Возврат депозита». Отправка формы — только вручную.
+// @match        https://agis.credit7.ru/admin/agis2/core/loan/*
+// @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*
+// @match        https://agis.belkacredit.ru/admin/agis2/core/loan/*
+// @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*
+// @match        https://agis.credit365.ru/admin/agis2/core/loan/*
+// @match        https://agis.berrycash.ru/admin/agis2/core/loan/*
 // @match        https://agis.moneymania.ru/admin/agis2/core/loan/*
+// @match        https://agis.vashcash.ru/admin/agis2/core/loan/*
+// @match        https://agis.ikracredit.ru/admin/agis2/core/loan/*
+// @match        https://agis.zaimix.ru/admin/agis2/core/loan/*
+// @match        https://agis.finrook.ru/admin/agis2/core/loan/*
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-deposit-refund.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-deposit-refund.user.js
 // @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.4.0/lib/agis-core.js#sha256=JqxyWNETCOHKc6WMlT3E/6odW4N9iDA7zsnIOVz6uys=
@@ -89,7 +99,9 @@
   const log = (...a) => {
     if (debugCtl.value) console.log(`[${SCRIPT_NS}]`, ...a);
   };
-  const warn = (...a) => console.warn(`[${SCRIPT_NS}]`, ...a);
+  // Хост в префиксе warn: скрипт работает на 11 брендах AGIS, а вручную проверен только
+  // на moneymania — по логу должно быть сразу видно, на каком бренде разошлась разметка.
+  const warn = (...a) => console.warn(`[${SCRIPT_NS}][${location.host}]`, ...a);
 
   const routeTokenController = createRouteTokenController();
 
@@ -412,7 +424,7 @@
 
       if (!directionSet || !typeSet) {
         showBanner('Заполнено частично: проверьте направление OUT и тип операции.', { type: 'error' });
-        warn('Не все поля установлены:', { directionSet, typeSet });
+        warn('Не все поля установлены:', { directionSet, typeSet, host: location.host });
         return;
       }
 
