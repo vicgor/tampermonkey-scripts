@@ -8,7 +8,7 @@
 
 ## Текущее состояние
 
-Волны 1–4 полностью завершены — все 8 production-скриптов на общем ядре
+Волны 1–4 полностью завершены — все 9 production-скриптов на общем ядре
 `lib/agis-core.js`, опубликованном и реально переиспользуемом через `@require` +
 SRI-хеш (это уже не «канон на бумаге»); все скрипты покрывают все 11 текущих
 доменов AGIS (см. `README.md` "Домены AGIS — источник истины"). Волна 5 —
@@ -17,7 +17,7 @@ SRI-хеш (это уже не «канон на бумаге»); все скр�
 **Скрипты в проде (`scripts/*.user.js`) — по состоянию на конец Волны 5
 (частично):** таблица ниже описывает историю до этой точки; дальше версии
 живут быстрее, чем этот файл — **сверяйся с реальным `@version` в самом
-скрипте** и `git tag -l` для тегов ядра (сейчас: `v1.0.0`…`v1.3.0`).
+скрипте** и `git tag -l` для тегов ядра (сейчас: `v1.0.0`…`v1.4.0`).
 
 | Скрипт | Версия | `@require lib/agis-core.js` | Комментарий |
 |---|---|---|---|
@@ -79,7 +79,7 @@ migration-логов) в ходе ручной browser-проверки и вн�
 **Цель:** сделать общий каркас реально переиспользуемым, а не «каноном на бумаге».
 
 - [x] Создан `lib/agis-core.js`, экспортирует API через `window.__AGIS_CORE__`:
-  `debounce`, `cleanupRoute`, `cleanup`, `storageGet`, `storageSet`, `storageSetDebounced`, `storageDelete`, `waitForElement`, `observeAddedElements`, `httpRequest`, `api.getJson/postJson/getHtml`, `onUrlChange`, `createRouteTokenController`, `showBanner`, `registerDebugToggle`.
+  `debounce`, `cleanupRoute`, `cleanup`, `storageGet`, `storageSet`, `storageSetDebounced`, `storageDelete`, `waitForElement`, `observeAddedElements`, `httpRequest`, `api.getJson/postJson/getHtml`, `onUrlChange`, `createRouteTokenController`, `showBanner`, `registerDebugToggle`. Позже добавлены `ruMonthNumber` (v1.2.0), `normalizeText`/`cellText` (v1.3.0), `waitForCondition` (v1.4.0) — актуальный список см. в `README.md` "Что внутри".
 - [x] Опубликован через GitHub Raw + версионированные теги `v1.0.0`, `v1.1.0` (добавил `storageSet`/`storageDelete` для немедленной, не debounced записи перед навигацией) и `v1.2.0` (добавил `ruMonthNumber`, см. Волна 3) — все **с SRI-хешем** (`#sha256=...`).
 - [x] Мигрированы все 7 скриптов: `agis-paste-cleaner-amount` (пилот, PR #13/#14), `agis-linkify-loan-note` (#15), `agis-rusupport-clipboard` (#16), `agis-duplicate-income` (#18), `agis-add-income-from-googlesheet` (#19), `agis-loan-info-navbar` (#20), `agis-protocol-income-fill` (#22).
 - [x] Общий паттерн `registerDebugToggle()` — await перед первым `bootstrap()`, а не fire-and-forget (найдено и исправлено сначала в #18, затем унифицировано в linkify/rusupport через #21, сразу учтено в #22 — иначе debug-логи могли не появляться вовсе на страницах, где нужный DOM уже присутствует при старте).
@@ -173,15 +173,15 @@ migration-логов) в ходе ручной browser-проверки и вн�
   (единственное место, где теги реально используются), не как механизм
   доставки.
 
-### 4.4/4.5 — не начато
+### 4.4/4.5 — ✅ Завершено
 
-- [x] **Инсталлятор.** Таблица «скрипт → что делает → Install» в `README.md` — по одной строке на скрипт (не на бренд: все 7 скриптов уже покрывают все 7 доменов, отдельный install на бренд не нужен), ссылки на `raw.githubusercontent.com/.../main/...` — Tampermonkey распознаёт `.user.js` URL и предложит установку. Все 7 ссылок проверены (`curl` → HTTP 200).
+- [x] **Инсталлятор.** Таблица «скрипт → что делает → Install» в `README.md` — по одной строке на скрипт (не на бренд: каждый скрипт покрывает все домены сразу, отдельный install на бренд не нужен), ссылки на `raw.githubusercontent.com/.../main/...` — Tampermonkey распознаёт `.user.js` URL и предложит установку. Все ссылки проверены (`curl` → HTTP 200).
 - [x] **Метаблок-валидатор** `scripts/validate-meta.js` (`npm run validate-meta`, в `ci.yml`). Проверено перед реализацией, что реально не покрыто `eslint-plugin-userscripts` (он проверяет только присутствие полей и валидность имён `@grant`, не соответствие использованию) — покрыты все 3 пункта, изначально заявленных в этой задаче:
   - `@grant` vs фактическое использование (карта обёртка → `GM_*` из шапки `lib/agis-core.js`: `storageGet`→`GM_getValue`, `storageSet`/`storageSetDebounced`→`GM_setValue`, `storageDelete`→`GM_deleteValue`, `httpRequest`/`api.*`→`GM_xmlhttpRequest`, `registerDebugToggle`→все три — плюс прямые вызовы `GM_*`). Не хватает — `ERROR`; объявлен, но не используется — `WARNING` (не блокирует CI: карта обёрток может быть неполной для будущих скриптов).
   - `@connect` обязателен и не `*`, если используется `GM_xmlhttpRequest`.
   - `@namespace` уникален и не дефолтный; `@match` не открыт на любой хост (`*://*/*`).
   Не покрыто (сознательно, см. `README.md` "Инструменты разработки"): бамп `@version` при изменении файла — нужен git diff против базовой ветки, отдельная задача (ниже); обоснованность `@sandbox`/`@run-at` — слишком эвристично.
-- [ ] **Проверка бампа `@version` на PR** — сравнить `@version` в изменённых `scripts/*.user.js` между базовой веткой и HEAD (`git diff`), упасть, если файл менялся, а `@version` — нет. Требует `fetch-depth` в `ci.yml` (сейчас shallow clone) и аккуратной обработки edge-case'ов (detached HEAD, ref недоступен локально) — не блокировать вслепую.
+- [x] **Проверка бампа `@version` на PR** — реализована в рамках 4.3, см. `scripts/check-version-bump.js` выше.
 
 ---
 
@@ -191,7 +191,8 @@ migration-логов) в ходе ручной browser-проверки и вн�
 **Приоритет:** по мере появления времени.
 
 - [x] **Unit-тесты парсеров.** `vitest` (`npm test`, см. `README.md` "Тесты"),
-  67 тестов в `test/lib/` + `test/scripts/`. Покрыты все самодостаточные чистые
+  126 тестов в `test/lib/` + `test/scripts/` (67 на момент закрытия задачи, дальше
+  росло вместе с jsdom-тиром и `agis-deposit-refund`). Покрыты все самодостаточные чистые
   функции (без DOM/window/GM_*): `ruMonthNumber` (ядро); `parseCSV`, `tokenizeCSV`,
   `pad` (googlesheet); `extractTotal` (duplicate-income); `getTokenRe` (linkify);
   `normalizeText`, `pad2`, `toTwoDigitYear`, `isValidDateParts`, `buildShortDate`,

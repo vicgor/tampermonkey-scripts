@@ -26,20 +26,20 @@ userscript'а в браузере (SPA-навигация, DOM-инъекция,
 
 | Файл | Роль |
 |---|---|
-| `lib/agis-core.js` | **Канон**. Единственный источник инфраструктурного API: `waitForElement`, `observeAddedElements`, `debounce`, `cleanupRoute`/`cleanup`, `storageGet`/`storageSet`/`storageSetDebounced`/`storageDelete`, `httpRequest`/`api.getJson`/`api.postJson`/`api.getHtml`, `onUrlChange`, `createRouteTokenController`, `showBanner`, `registerDebugToggle`, `ruMonthNumber`, `normalizeText`, `cellText`. Подключается всеми `scripts/*.user.js` через `@require` с версионированным git-тегом + SRI-хешем (`#sha256=...`), не копируется вручную. |
+| `lib/agis-core.js` | **Канон**. Единственный источник инфраструктурного API: `waitForElement`, `waitForCondition`, `observeAddedElements`, `debounce`, `cleanupRoute`/`cleanup`, `storageGet`/`storageSet`/`storageSetDebounced`/`storageDelete`, `httpRequest`/`api.getJson`/`api.postJson`/`api.getHtml`, `onUrlChange`, `createRouteTokenController`, `showBanner`, `registerDebugToggle`, `ruMonthNumber`, `normalizeText`, `cellText`. Подключается всеми `scripts/*.user.js` через `@require` с версионированным git-тегом + SRI-хешем (`#sha256=...`), не копируется вручную. |
 | `templates/example-consumer.user.js` | Живой пример потребителя `lib/agis-core.js` — минимальный скрипт, показывающий структуру `bootstrap()`, `routeTokenController`, кэш+бэкенд-фолбэк, debug-toggle. Копировать структуру, а не переносить код каркаса вручную. |
 | `template-tamper-monkey.md` | Обучающее объяснение более старой/упрощённой версии каркаса (до появления `lib/agis-core.js`) — читать только для исторического контекста, код брать из `templates/example-consumer.user.js`. |
 | `space-prompt.md` | System-prompt для AI-ассистента (Perplexity Space), который генерирует/правит эти скрипты вне Claude Code. |
 | `README.md` | Нормативный документ: требования к метаблоку, чеклист code review, правила версионирования, smoke-test, описание API `lib/agis-core.js`. Это источник правды по стандартам. |
-| `ROADMAP.md` | План унификации из волн; Волны 1–4 полностью завершены (общее ядро реально `@require`'ится всеми 8 скриптами, UX/конфиг унифицированы, ESLint/Prettier/CI/инсталлятор/метаблок-валидатор/проверка бампа `@version` на PR — всё готово; `release.yml` отложен осознанно, не «не начат», см. `ROADMAP.md`). Волна 5 частично: unit-тесты + jsdom-тир завершены (`agis-loan-info-navbar.user.js` и `agis-protocol-income-fill.user.js`, фикстуры в `fixtures/`), TypeScript (`.user.ts` + esbuild) не начат — единственная существенная незакрытая задача. Таблица версий скриптов **может устаревать быстрее, чем этот файл** — сверяйся с реальным `@version` в самом скрипте и `git tag -l` для тегов ядра. |
-| `scripts/*.user.js` | Production-скрипты (сейчас 8 файлов), все переведены на `lib/agis-core.js`. |
+| `ROADMAP.md` | План унификации из волн; Волны 1–4 полностью завершены (общее ядро реально `@require`'ится всеми 9 скриптами, UX/конфиг унифицированы, ESLint/Prettier/CI/инсталлятор/метаблок-валидатор/проверка бампа `@version` на PR — всё готово; `release.yml` отложен осознанно, не «не начат», см. `ROADMAP.md`). Волна 5 частично: unit-тесты + jsdom-тир завершены (`agis-loan-info-navbar.user.js` и `agis-protocol-income-fill.user.js`, фикстуры в `fixtures/`), TypeScript (`.user.ts` + esbuild) не начат — единственная существенная незакрытая задача. Таблица версий скриптов **может устаревать быстрее, чем этот файл** — сверяйся с реальным `@version` в самом скрипте и `git tag -l` для тегов ядра. |
+| `scripts/*.user.js` | Production-скрипты (сейчас 9 файлов), все переведены на `lib/agis-core.js`. |
 
 ## Как реально устроено переиспользование кода
 
 `lib/agis-core.js` подключается через `@require` с точной версией тега +
 SRI-хешем, например:
 ```
-// @require https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.2.0/lib/agis-core.js#sha256=...
+// @require https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.4.0/lib/agis-core.js#sha256=...
 ```
 Каждый `@require`'ящий скрипт получает свой собственный экземпляр состояния ядра
 (observers/timers) — IIFE ядра выполняется отдельно в сендбоксе каждого скрипта.
@@ -72,7 +72,8 @@ SRI-хешем, например:
 
 ## Ключевые инварианты каркаса (см. `lib/agis-core.js` для реализации)
 
-- Работа с DOM всегда через `waitForElement()` / `observeAddedElements()` —
+- Работа с DOM всегда через `waitForElement()` / `waitForCondition()` /
+  `observeAddedElements()` —
   никогда `setInterval`-поллинг и никогда прямой `document.querySelector` в момент
   старта (на `document-start` DOM ещё может быть не готов).
 - `MutationObserver` вешается на конкретный root (`document.body`/`documentElement`),
@@ -87,8 +88,10 @@ SRI-хешем, например:
   после SPA-перехода.
 - `pagehide` вызывает `cleanup()` (все таймеры + все observer'ы) и стоп-функцию
   `onUrlChange`.
-- `GM_getValue`/`GM_setValue` — асинхронные, всегда `await` + `try/catch`
-  (`storageGet`), частые записи — только через debounce (`storageSetDebounced`).
+- `GM_getValue`/`GM_setValue` — только через обёртки ядра (`storageGet`/`storageSet`/
+  `storageDelete`) с `await` + `try/catch`. При `@sandbox DOM` они синхронны, но
+  обёртки возвращают промис (в других режимах Tampermonkey API асинхронен), поэтому
+  `await` обязателен всегда. Частые записи — только через `storageSetDebounced`.
   Ключи кэша должны включать версию на случай смены формата — либо через
   отдельную константу `CACHE_VERSION` (нужна, когда ключ строится динамически,
   как в `agis-loan-info-navbar.user.js`), либо суффиксом прямо в статической
