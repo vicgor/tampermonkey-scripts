@@ -15,6 +15,8 @@
 | `template-tamper-monkey.md` | **Историческое обучающее пояснение** (до появления `lib/agis-core.js`). | Брать из него код для нового скрипта — устарел |
 | `space-prompt.md` | **Policy-слой**. Правила для AI-ассистента (Perplexity Space). | Редактировать вручную без осознанного PR |
 | `README.md` | **Стандарты**. Требования, чеклист ревью, правила релиза. | Использовать как шаблон |
+| `CLAUDE.md` | **Инструкции для Claude Code**: роли файлов, инварианты каркаса, правила версионирования — краткая выжимка из этого README. | Расходиться с `README.md` — README первичен |
+| `ROADMAP.md` | **План и история**: волны работ, принятые решения и осознанно отложенные задачи. | Считать таблицу версий скриптов источником правды — сверяйся с `@version` в самом скрипте |
 | `scripts/*.user.js` | **Production скрипты**. `@require`'ят `lib/agis-core.js`, содержат только предметную логику. | Реимплементировать инфраструктуру вручную |
 
 ---
@@ -30,9 +32,18 @@ tampermonkey-scripts/
 ├── template-tamper-monkey.md  # Историческое обучающее пояснение
 ├── space-prompt.md         # Policy-слой: правила AI-ассистента
 ├── README.md               # Стандарты и чеклист ревью
-└── scripts/                # Production-скрипты
-    ├── agis-loan-info-navbar.user.js
-    └── ...
+├── CLAUDE.md               # Инструкции для Claude Code
+├── ROADMAP.md              # План работ по волнам, история решений
+├── package.json            # ESLint + Prettier + vitest (не сборка)
+├── eslint.config.js
+├── vitest.config.js
+├── .github/workflows/ci.yml   # lint + format:check + test + validate-meta + check-version-bump
+├── fixtures/               # Реальные куски HTML AGIS для jsdom-тестов
+├── test/                   # vitest: test/lib/ + test/scripts/
+├── scripts/                # Production-скрипты
+│   ├── agis-loan-info-navbar.user.js
+│   └── ...
+└── scripts/validate-meta.js, scripts/check-version-bump.js  # CI-проверки, не userscript'ы
 ```
 
 ---
@@ -294,7 +305,7 @@ Manifest V3, жёсткий CSP, асинхронность GM_*-функций,
 SPA-навигацию.
 
 ```javascript
-// @require https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.2.0/lib/agis-core.js#sha256=...
+// @require https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.4.0/lib/agis-core.js#sha256=...
 ```
 
 ```javascript
@@ -310,6 +321,7 @@ const { waitForElement, onUrlChange, api, showBanner } = window.__AGIS_CORE__;
 | Функция | Назначение | Требует `@grant` |
 |---|---|---|
 | `waitForElement(selector, opts)` | Ждёт появления элемента через MutationObserver с таймаутом | — |
+| `waitForCondition(probe, opts)` | То же, но ждёт произвольного условия: `probe()` вызывается при каждой мутации, промис резолвится его первым truthy-значением. Для случаев, где нужного элемента не выразить одним CSS-селектором (поиск поля по тексту подписи и т.п.). `opts`: `root`, `timeout`, `describe` (текст для лога при таймауте). Ядро v1.4.0+ | — |
 | `observeAddedElements(selector, cb, opts)` | Вызывает callback для каждого нового подходящего элемента | — |
 | `debounce(fn, wait)` | Стандартный debounce с `.cancel()` | — |
 | `cleanupRoute()` | Очищает observer'ы/таймеры `waitForElement` текущего маршрута | — |
@@ -353,7 +365,7 @@ const { waitForElement, onUrlChange, api, showBanner } = window.__AGIS_CORE__;
 // @description  Серый цвет для статей старше 7 дней на news.example.com
 // @match        https://news.example.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=news.example.com
-// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.2.0/lib/agis-core.js#sha256=...
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.4.0/lib/agis-core.js#sha256=...
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_setValue

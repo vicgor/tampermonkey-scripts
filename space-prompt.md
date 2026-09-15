@@ -34,8 +34,9 @@
   построчно — подключай через `@require` с версионированным git-тегом + SRI-хешем:
   `// @require https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/<тег>/lib/agis-core.js#sha256=<хеш>`
   (актуальный тег и хеш смотри в `git tag -l` и `@require`-строке любого файла в `scripts/`).
-  Ядро (`window.__AGIS_CORE__` после `@require`) даёт: `waitForElement`/`observeAddedElements`
-  (MutationObserver); `storageGet`/`storageSet`/`storageSetDebounced`/`storageDelete`;
+  Ядро (`window.__AGIS_CORE__` после `@require`) даёт: `waitForElement`/`waitForCondition`/`observeAddedElements`
+  (MutationObserver; `waitForCondition` — когда нужное не выражается CSS-селектором, например
+  поиск поля по тексту подписи); `storageGet`/`storageSet`/`storageSetDebounced`/`storageDelete`;
   `httpRequest`/`api.getJson`/`api.postJson`/`api.getHtml` поверх `GM_xmlhttpRequest`;
   `onUrlChange` для SPA; `createRouteTokenController`; `showBanner`; `registerDebugToggle`;
   `cleanupRoute`/`cleanup`.
