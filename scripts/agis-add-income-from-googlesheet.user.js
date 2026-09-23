@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS автозаполнение из Google Sheets
 // @namespace    agis.income.googlesheet
-// @version      4.6
+// @version      4.7
 // @description  Автозаполнение формы AGIS из Google Таблицы (CSV Publish). Запрос через GM_xmlhttpRequest (обходит CSP).
 // @match        https://agis.creditsmile.ru/*/loan*/*/income/create
 // @match        https://agis.belkacredit.ru/*/loan*/*/income/create
@@ -14,7 +14,9 @@
 // @match        https://agis.ikracredit.ru/*/loan*/*/income/create
 // @match        https://agis.zaimix.ru/*/loan*/*/income/create
 // @match        https://agis.finrook.ru/*/loan*/*/income/create
-// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.1.0/lib/agis-core.js#sha256=mrgmLBDYkBLsL/GI0rVsuHT8V8QjzhXSEneovVOIL4Y=
+// @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-add-income-from-googlesheet.user.js
+// @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-add-income-from-googlesheet.user.js
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.4.0/lib/agis-core.js#sha256=JqxyWNETCOHKc6WMlT3E/6odW4N9iDA7zsnIOVz6uys=
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_setValue
@@ -89,7 +91,11 @@
       if (legacyUrl !== undefined && !(await storageGet(STORAGE_KEY, undefined))) {
         await storageSet(STORAGE_KEY, legacyUrl);
         await storageDelete('agis_google_sheet_url');
-        log('Миграция storage: sheet-url перенесён');
+        // Безусловный console.log, не log(): миграция выполняется до резолва
+        // registerDebugToggle (debugCtl.value ещё false), поэтому гейтированный
+        // лог здесь никогда не печатался. Событие разовое — см. такой же фикс
+        // в agis-protocol-income-fill.user.js.
+        console.log(`[${SCRIPT_NS}] Миграция storage: sheet-url перенесён`);
       }
     } catch (e) {
       warn('Миграция storage не удалась:', e);

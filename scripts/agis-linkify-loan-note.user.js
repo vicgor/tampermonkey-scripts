@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - linkify loannote
 // @namespace    agis.linkify.loannote
-// @version      3.4
+// @version      3.5
 // @description  Делает ссылки кликабельными в колонке "Контент" на страницах loannote/list. Поддерживает markdown-ссылки, голые URL и тикеты Jira RUSUPPORT-*.
 // @match        https://agis.volgazaim.ru/admin/*/loannote/list*
 // @match        https://agis.creditsmile.ru/admin/*/loannote/list*
@@ -14,6 +14,8 @@
 // @match        https://agis.ikracredit.ru/admin/*/loannote/list*
 // @match        https://agis.zaimix.ru/admin/*/loannote/list*
 // @match        https://agis.finrook.ru/admin/*/loannote/list*
+// @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-linkify-loan-note.user.js
+// @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-linkify-loan-note.user.js
 // @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.4.0/lib/agis-core.js#sha256=JqxyWNETCOHKc6WMlT3E/6odW4N9iDA7zsnIOVz6uys=
 // @run-at       document-start
 // @sandbox      DOM
