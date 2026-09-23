@@ -58,7 +58,7 @@ npm install
 npm run lint           # ESLint: метаблок, инварианты каркаса, безопасность рендера
 npm run format         # Prettier --write (2 пробела, одинарные кавычки)
 npm run format:check   # Prettier --check, без изменений — для проверки перед коммитом
-npm run validate-meta  # scripts/validate-meta.js — @grant/@connect/@namespace/@match (см. ниже)
+npm run validate-meta  # scripts/validate-meta.js — @grant/@connect/@namespace/@match + SRI @require ядра (см. ниже)
 npm run check-version-bump  # scripts/check-version-bump.js — @version бампнут, если файл менялся (только в PR-контексте CI)
 ```
 
@@ -83,6 +83,17 @@ npm run check-version-bump  # scripts/check-version-bump.js — @version бам�
 - **`@namespace`**: уникален среди всех `scripts/*.user.js` и не равен дефолту
   Tampermonkey (`http://tampermonkey.net/`);
 - **`@match`**: не открыт на любой хост (`*://*/*` и т.п.).
+- **SRI `@require` ядра**: любой `@require`, где встречается `agis-core.js`,
+  должен иметь канонический вид
+  `https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/<тег>/lib/agis-core.js#sha256=<хеш>`
+  (иначе `ERROR` «нестандартная ссылка» — http://, зеркала, `refs/tags/`, хвост-комментарий
+  в строке не пропускаются молча); тег — релизный `vX.Y.Z` (не `main`/ветка, не
+  пре-релиз вроде `v1.5.0-rc1`); тег существует; хеш (base64 или hex; во фрагменте
+  допустимо несколько хешей через запятую, берётся `sha256=`) совпадает с
+  `git show <тег>:lib/agis-core.js` — байтами файла в теге, а не рабочей копией.
+  Каждый `scripts/*.user.js` и `templates/*.user.js` обязан содержать хотя бы один
+  такой `@require` (у шаблона проверяется только SRI). Нужны git в `PATH` и теги
+  в чекауте: в CI их даёт `fetch-depth: 0`, локально — `git fetch --tags`.
 
 Бамп `@version` при изменении файла проверяет отдельный скрипт —
 `scripts/check-version-bump.js` (`npm run check-version-bump`): если

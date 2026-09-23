@@ -8,11 +8,18 @@
 //      lib/agis-core.js и проверена построчно по всем 7 текущим скриптам).
 //   2. @connect обязателен (и не может быть *), если скрипт использует GM_xmlhttpRequest.
 //   3. @namespace уникален и не равен дефолту Tampermonkey; @match не открыт на любой хост.
+//   4. SRI: @require на lib/agis-core.js закреплён на существующий git-тег, и #sha256=
+//      совпадает с хешем файла в ЭТОМ теге (git show <тег>:lib/agis-core.js) — не с
+//      рабочей копией. Проверяются scripts/*.user.js и templates/*.user.js.
 
+const crypto = require('crypto');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const SCRIPTS_DIR = path.join(__dirname, '..', 'scripts');
+const ROOT_DIR = path.join(__dirname, '..');
+const SCRIPTS_DIR = path.join(ROOT_DIR, 'scripts');
+const TEMPLATES_DIR = path.join(ROOT_DIR, 'templates');
 const TAMPERMONKEY_DEFAULT_NAMESPACE = 'http://tampermonkey.net/';
 
 // Каждая обёртка core вызывает ровно эти GM_*-функции (проверено чтением
@@ -103,6 +110,113 @@ function matchHost(matchValue) {
   return m ? m[1] : null;
 }
 
+// @require на ядро: https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/<ref>/lib/agis-core.js[#<хеши>]
+// Любой @require, в котором встречается agis-core.js, считается ссылкой на ядро и ОБЯЗАН
+// совпасть с этим каноническим видом — иначе ошибка, а не молчаливый пропуск (http://,
+// зеркала jsDelivr, refs/tags/..., другой регистр, хвост-комментарий в строке и т.п.).
+const CORE_MARKER_RE = /agis-core\.js/i;
+const CORE_REQUIRE_RE =
+  /^https:\/\/raw\.githubusercontent\.com\/vicgor\/tampermonkey-scripts\/([^/]+)\/lib\/agis-core\.js(?:#(.*))?$/;
+// Только релизные теги vX.Y.Z — пре-релизы (v1.5.0-rc1) намеренно не принимаются.
+const TAG_RE = /^v\d+\.\d+\.\d+$/;
+
+// Содержимое файла в теге — байты из git-объекта, без EOL-конверсии рабочей копии
+// (core.autocrlf на Windows не влияет). Кэш: один git show на тег за запуск.
+// Возвращает { content } или { error } — чтобы отличать «нет тега» от «нет git».
+const tagFileCache = new Map();
+function readCoreAtTag(tag) {
+  if (!tagFileCache.has(tag)) {
+    let result;
+    try {
+      const content = execFileSync('git', ['show', `${tag}:lib/agis-core.js`], {
+        cwd: ROOT_DIR,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: 16 * 1024 * 1024,
+      });
+      result = { content };
+    } catch (e) {
+      if (e.code === 'ENOENT') {
+        result = { error: 'git не найден в PATH — проверка SRI невозможна' };
+      } else {
+        const stderr = String(e.stderr || '').trim();
+        result = {
+          error:
+            `git show ${tag}:lib/agis-core.js не сработал` +
+            (stderr ? `: ${stderr}` : '') +
+            ' — опечатка в теге, запуск вне репозитория или нет тегов (git fetch --tags)',
+        };
+      }
+    }
+    tagFileCache.set(tag, result);
+  }
+  return tagFileCache.get(tag);
+}
+
+function sha256(content) {
+  const digest = crypto.createHash('sha256').update(content).digest();
+  return { base64: digest.toString('base64'), hex: digest.toString('hex') };
+}
+
+// Tampermonkey принимает хеш и в base64 (как у нас), и в hex.
+function sriMatches(expected, digest) {
+  return expected === digest.base64 || expected.toLowerCase() === digest.hex;
+}
+
+// Фрагмент может содержать несколько хешей через запятую (#md5=...,sha256=...) —
+// Tampermonkey это допускает; нам нужен sha256.
+function extractSha256(fragment) {
+  if (!fragment) return null;
+  for (const part of fragment.split(',')) {
+    const m = part.trim().match(/^sha256=(\S+)$/i);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+// readFile(tag) -> { content } | { error }; параметром, чтобы тесты не зависели от git.
+// Возвращает { errors, checked } — checked = сколько ссылок на ядро реально проверено.
+function checkCoreRequires(requireValues, readFile = readCoreAtTag) {
+  const errors = [];
+  let checked = 0;
+  for (const value of requireValues) {
+    if (!CORE_MARKER_RE.test(value)) continue; // чужие библиотеки здесь не проверяем
+    checked += 1;
+
+    const m = value.match(CORE_REQUIRE_RE);
+    if (!m) {
+      errors.push(
+        `нестандартная ссылка на ядро "${value}" — ожидается https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/<тег>/lib/agis-core.js#sha256=<хеш> без хвоста в строке`,
+      );
+      continue;
+    }
+    const [, ref, fragment] = m;
+
+    if (!TAG_RE.test(ref)) {
+      errors.push(
+        `@require ядра указывает на "${ref}", а не на тег vX.Y.Z — мутабельная ссылка, SRI сломается при следующем коммите`,
+      );
+      continue;
+    }
+    const expected = extractSha256(fragment);
+    if (!expected) {
+      errors.push(`@require ядра ${ref} без "#sha256=..." — SRI-хеш обязателен`);
+      continue;
+    }
+    const { content, error } = readFile(ref);
+    if (error) {
+      errors.push(error);
+      continue;
+    }
+    const digest = sha256(content);
+    if (!sriMatches(expected, digest)) {
+      errors.push(
+        `SRI-хеш @require ${ref} не совпадает с lib/agis-core.js в теге: в URL ${expected}, в теге ${digest.base64}`,
+      );
+    }
+  }
+  return { errors, checked };
+}
+
 function validateFile(file, content, namespaceRegistry) {
   const errors = [];
   const warnings = [];
@@ -156,14 +270,26 @@ function validateFile(file, content, namespaceRegistry) {
     }
   }
 
+  // --- SRI @require ядра ---
+  const core = checkCoreRequires(fields.require || []);
+  errors.push(...core.errors);
+  // Все production-скрипты работают на ядре (CLAUDE.md) — отсутствие @require ядра = ошибка.
+  if (core.checked === 0)
+    errors.push('нет @require на lib/agis-core.js — все scripts/*.user.js обязаны подключать ядро');
+
   return { errors, warnings };
 }
 
-function main() {
-  const files = fs
-    .readdirSync(SCRIPTS_DIR)
+function listUserScripts(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
     .filter((f) => f.endsWith('.user.js'))
     .sort();
+}
+
+function main() {
+  const files = listUserScripts(SCRIPTS_DIR);
 
   const namespaceRegistry = {};
   const results = [];
@@ -189,6 +315,19 @@ function main() {
     }
   }
 
+  // Шаблон — не production-скрипт (placeholder-значения @match/@namespace), поэтому из
+  // полного набора проверок к нему применяется только SRI: из шаблона копируют @require.
+  const templates = listUserScripts(TEMPLATES_DIR);
+  for (const file of templates) {
+    const content = fs.readFileSync(path.join(TEMPLATES_DIR, file), 'utf8');
+    const { fields } = parseMetablock(content, file);
+    const { errors, checked } = checkCoreRequires(fields.require || []);
+    // Шаблон без единой ссылки на ядро — проверять нечего, «0 проверено = OK» не допускаем.
+    if (checked === 0) errors.push('в шаблоне нет @require на lib/agis-core.js — SRI проверять нечего');
+    results.push({ file: `templates/${file}`, errors, warnings: [] });
+    if (errors.length > 0) hasErrors = true;
+  }
+
   let totalWarnings = 0;
   for (const { file, errors, warnings } of results) {
     for (const message of errors) console.error(`[validate-meta] ERROR ${file}: ${message}`);
@@ -196,9 +335,14 @@ function main() {
     totalWarnings += warnings.length;
   }
 
-  console.log(`[validate-meta] проверено файлов: ${files.length}`);
+  console.log(`[validate-meta] проверено файлов: ${files.length} (+ шаблонов: ${templates.length})`);
   if (totalWarnings > 0) console.log(`[validate-meta] warnings: ${totalWarnings}`);
   process.exit(hasErrors ? 1 : 0);
 }
 
-main();
+if (require.main === module) {
+  main();
+} else {
+  // Для vitest (test/scripts/validate-meta.test.js).
+  module.exports = { checkCoreRequires, extractSha256, parseMetablock, sha256, sriMatches };
+}
