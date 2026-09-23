@@ -58,7 +58,7 @@ npm install
 npm run lint           # ESLint: метаблок, инварианты каркаса, безопасность рендера
 npm run format         # Prettier --write (2 пробела, одинарные кавычки)
 npm run format:check   # Prettier --check, без изменений — для проверки перед коммитом
-npm run validate-meta  # scripts/validate-meta.js — @grant/@connect/@namespace/@match (см. ниже)
+npm run validate-meta  # scripts/validate-meta.js — @grant/@connect/@namespace/@match + SRI @require ядра (см. ниже)
 npm run check-version-bump  # scripts/check-version-bump.js — @version бампнут, если файл менялся (только в PR-контексте CI)
 ```
 
@@ -83,6 +83,12 @@ npm run check-version-bump  # scripts/check-version-bump.js — @version бам�
 - **`@namespace`**: уникален среди всех `scripts/*.user.js` и не равен дефолту
   Tampermonkey (`http://tampermonkey.net/`);
 - **`@match`**: не открыт на любой хост (`*://*/*` и т.п.).
+- **SRI `@require` ядра**: ссылка на `lib/agis-core.js` закреплена на тег
+  `vX.Y.Z` (не на `main`/ветку), содержит `#sha256=...`, тег существует, и хеш
+  совпадает с `git show <тег>:lib/agis-core.js` — байтами файла в теге, а не
+  рабочей копией. Проверяются и `scripts/*.user.js`, и `templates/*.user.js`
+  (из шаблона копируют `@require`). Нужны git-теги в чекауте: в CI их даёт
+  `fetch-depth: 0`, локально — `git fetch --tags`.
 
 Бамп `@version` при изменении файла проверяет отдельный скрипт —
 `scripts/check-version-bump.js` (`npm run check-version-bump`): если

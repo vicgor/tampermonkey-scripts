@@ -8,11 +8,18 @@
 //      lib/agis-core.js и проверена построчно по всем 7 текущим скриптам).
 //   2. @connect обязателен (и не может быть *), если скрипт использует GM_xmlhttpRequest.
 //   3. @namespace уникален и не равен дефолту Tampermonkey; @match не открыт на любой хост.
+//   4. SRI: @require на lib/agis-core.js закреплён на существующий git-тег, и #sha256=
+//      совпадает с хешем файла в ЭТОМ теге (git show <тег>:lib/agis-core.js) — не с
+//      рабочей копией. Проверяются scripts/*.user.js и templates/*.user.js.
 
+const crypto = require('crypto');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const SCRIPTS_DIR = path.join(__dirname, '..', 'scripts');
+const ROOT_DIR = path.join(__dirname, '..');
+const SCRIPTS_DIR = path.join(ROOT_DIR, 'scripts');
+const TEMPLATES_DIR = path.join(ROOT_DIR, 'templates');
 const TAMPERMONKEY_DEFAULT_NAMESPACE = 'http://tampermonkey.net/';
 
 // Каждая обёртка core вызывает ровно эти GM_*-функции (проверено чтением
@@ -103,6 +110,71 @@ function matchHost(matchValue) {
   return m ? m[1] : null;
 }
 
+// @require на ядро: https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/<ref>/lib/agis-core.js[#sha256=<hash>]
+const CORE_REQUIRE_RE =
+  /^https:\/\/raw\.githubusercontent\.com\/vicgor\/tampermonkey-scripts\/([^/]+)\/lib\/agis-core\.js(?:#(.*))?$/;
+const TAG_RE = /^v\d+\.\d+\.\d+$/;
+
+// Содержимое файла в теге — байты из git-объекта, без EOL-конверсии рабочей копии
+// (core.autocrlf на Windows не влияет). Кэш: один git show на тег за запуск.
+const tagFileCache = new Map();
+function readCoreAtTag(tag) {
+  if (!tagFileCache.has(tag)) {
+    let content;
+    try {
+      content = execFileSync('git', ['show', `${tag}:lib/agis-core.js`], {
+        cwd: ROOT_DIR,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        maxBuffer: 16 * 1024 * 1024,
+      });
+    } catch {
+      content = null;
+    }
+    tagFileCache.set(tag, content);
+  }
+  return tagFileCache.get(tag);
+}
+
+// Tampermonkey принимает хеш и в base64 (как у нас), и в hex — сравниваем с обоими.
+function sriMatches(expected, content) {
+  const digest = crypto.createHash('sha256').update(content).digest();
+  return expected === digest.toString('base64') || expected.toLowerCase() === digest.toString('hex');
+}
+
+// readFile(tag) -> Buffer | null; параметром, чтобы тесты не зависели от git-тегов.
+function checkCoreRequires(requireValues, readFile = readCoreAtTag) {
+  const errors = [];
+  for (const value of requireValues) {
+    const m = value.match(CORE_REQUIRE_RE);
+    if (!m) continue; // чужие @require (не ядро) здесь не проверяем
+    const [, ref, fragment] = m;
+
+    if (!TAG_RE.test(ref)) {
+      errors.push(
+        `@require ядра указывает на "${ref}", а не на тег vX.Y.Z — мутабельная ссылка, SRI сломается при следующем коммите`,
+      );
+      continue;
+    }
+    const sri = fragment && fragment.match(/^sha256=(.+)$/);
+    if (!sri) {
+      errors.push(`@require ядра ${ref} без "#sha256=..." — SRI-хеш обязателен`);
+      continue;
+    }
+    const content = readFile(ref);
+    if (!content) {
+      errors.push(
+        `тег ${ref} не найден в репозитории (git show ${ref}:lib/agis-core.js не сработал) — опечатка в теге или нужен git fetch --tags`,
+      );
+      continue;
+    }
+    if (!sriMatches(sri[1], content)) {
+      const actual = crypto.createHash('sha256').update(content).digest('base64');
+      errors.push(`SRI-хеш @require ${ref} не совпадает с lib/agis-core.js в теге: в URL ${sri[1]}, в теге ${actual}`);
+    }
+  }
+  return errors;
+}
+
 function validateFile(file, content, namespaceRegistry) {
   const errors = [];
   const warnings = [];
@@ -156,14 +228,22 @@ function validateFile(file, content, namespaceRegistry) {
     }
   }
 
+  // --- SRI @require ядра ---
+  errors.push(...checkCoreRequires(fields.require || []));
+
   return { errors, warnings };
 }
 
-function main() {
-  const files = fs
-    .readdirSync(SCRIPTS_DIR)
+function listUserScripts(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
     .filter((f) => f.endsWith('.user.js'))
     .sort();
+}
+
+function main() {
+  const files = listUserScripts(SCRIPTS_DIR);
 
   const namespaceRegistry = {};
   const results = [];
@@ -189,6 +269,17 @@ function main() {
     }
   }
 
+  // Шаблон — не production-скрипт (placeholder-значения @match/@namespace), поэтому из
+  // полного набора проверок к нему применяется только SRI: из шаблона копируют @require.
+  const templates = listUserScripts(TEMPLATES_DIR);
+  for (const file of templates) {
+    const content = fs.readFileSync(path.join(TEMPLATES_DIR, file), 'utf8');
+    const { fields } = parseMetablock(content, file);
+    const errors = checkCoreRequires(fields.require || []);
+    results.push({ file: `templates/${file}`, errors, warnings: [] });
+    if (errors.length > 0) hasErrors = true;
+  }
+
   let totalWarnings = 0;
   for (const { file, errors, warnings } of results) {
     for (const message of errors) console.error(`[validate-meta] ERROR ${file}: ${message}`);
@@ -196,9 +287,14 @@ function main() {
     totalWarnings += warnings.length;
   }
 
-  console.log(`[validate-meta] проверено файлов: ${files.length}`);
+  console.log(`[validate-meta] проверено файлов: ${files.length} (+ шаблонов: ${templates.length})`);
   if (totalWarnings > 0) console.log(`[validate-meta] warnings: ${totalWarnings}`);
   process.exit(hasErrors ? 1 : 0);
 }
 
-main();
+if (require.main === module) {
+  main();
+} else {
+  // Для vitest (test/scripts/validate-meta.test.js).
+  module.exports = { checkCoreRequires, parseMetablock, sriMatches };
+}
