@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         Example Consumer of lib/agis-core.js
 // @namespace    domain.feature        // <- заменить: например agis.loaninfo
-// @version      0.1
+// @version      0.2
 // @description  Пример потребителя общего ядра: ожидание DOM, кэш, сеть, SPA-навигация, debug-toggle
 // @author       me
 // @match        https://example.com/path/*    // <- заменить на реальный домен
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=example.com
-// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.2.0/lib/agis-core.js#sha256=dV8YKJZ5amc3KVhAYRg7WBQV/dUGFM4UwLKXLN8RZRg=  // <- ОБНОВИТЬ тег и sha256 на актуальные (git tag -l) перед использованием этого шаблона
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.4.0/lib/agis-core.js#sha256=JqxyWNETCOHKc6WMlT3E/6odW4N9iDA7zsnIOVz6uys=  // <- ОБНОВИТЬ тег и sha256 на актуальные (git tag -l) перед использованием этого шаблона
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_setValue

@@ -1,0 +1,9 @@
+# LF во всех текстовых файлах независимо от core.autocrlf у разработчика.
+# Критично для lib/agis-core.js: SRI-хеш в @require считается от байтов файла
+# в теге — CRLF в коммите дал бы другой хеш. Заодно .prettierrc.json требует
+# endOfLine: lf, и без этого `npm run format:check` падает на Windows-чекаутах.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
