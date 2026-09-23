@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - дублировать приход
 // @namespace    agis.duplicate.income
-// @version      3.3.0
+// @version      3.3.1
 // @description  Клик по строке прихода → открыть форму создания и автозаполнить (дата, шлюз, внешний ID, сумма). Ручное подтверждение.
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan*/*/income/*
@@ -14,7 +14,9 @@
 // @match        https://agis.ikracredit.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.zaimix.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.finrook.ru/admin/agis2/core/loan*/*/income/*
-// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.3.0/lib/agis-core.js#sha256=I5eLTR/TbTGLxg3Mj2f8pM/oBCcbJ6BLSNQxveEcSFQ=
+// @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-duplicate-income.user.js
+// @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-duplicate-income.user.js
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.4.0/lib/agis-core.js#sha256=JqxyWNETCOHKc6WMlT3E/6odW4N9iDA7zsnIOVz6uys=
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_setValue
@@ -121,14 +123,18 @@
       if (legacyPayload !== undefined && !(await storageGet(STORAGE_KEY, undefined))) {
         await storageSet(STORAGE_KEY, legacyPayload);
         await storageDelete('agis_dup_income_payload');
-        log('Миграция storage: payload перенесён');
+        // Безусловный console.log, не log(): миграция выполняется до резолва
+        // registerDebugToggle (debugCtl.value ещё false), поэтому гейтированный
+        // лог здесь никогда не печатался. Событие разовое — см. такой же фикс
+        // в agis-protocol-income-fill.user.js.
+        console.log(`[${SCRIPT_NS}] Миграция storage: payload перенесён`);
       }
       // debug: debug_dup → agis:duplicate-income:debug
       const legacyDebug = await storageGet('debug_dup', undefined);
       if (legacyDebug !== undefined) {
         await storageSet(DEBUG_KEY, !!legacyDebug);
         await storageDelete('debug_dup');
-        log('Миграция storage: debug флаг перенесён');
+        console.log(`[${SCRIPT_NS}] Миграция storage: debug флаг перенесён`);
       }
     } catch (e) {
       warn('Миграция storage не удалась:', e);

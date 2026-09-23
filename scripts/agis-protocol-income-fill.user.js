@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - вставка прихода из протокола
 // @namespace    agis.protocol.income.fill
-// @version      2.2.0
+// @version      2.2.1
 // @description  Клик по строке протокола сохраняет данные; автопереход на список приходов нужного займа; на странице создания прихода кнопка вставки заполняет форму.
 // @match        https://agis.volgazaim.ru/admin/supportprocess/domain/supportprocesstask/*/task-protocol/list*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*/income/list*
@@ -60,7 +60,7 @@
 // @match        https://agis.finrook.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-protocol-income-fill.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-protocol-income-fill.user.js
-// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.3.0/lib/agis-core.js#sha256=I5eLTR/TbTGLxg3Mj2f8pM/oBCcbJ6BLSNQxveEcSFQ=
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.4.0/lib/agis-core.js#sha256=JqxyWNETCOHKc6WMlT3E/6odW4N9iDA7zsnIOVz6uys=
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_setValue

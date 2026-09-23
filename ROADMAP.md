@@ -21,13 +21,13 @@ SRI-хеш (это уже не «канон на бумаге»); все скр�
 
 | Скрипт | Версия | `@require lib/agis-core.js` | Комментарий |
 |---|---|---|---|
-| `agis-loan-info-navbar` | 5.6.0 | v1.3.0 | Волна 2 (PR #20), Волна 3 — `ruMonthNumber()` ядра (PR #24). Волна 5: `normalizeText`/`cellText` из ядра (PR #34), фикс `overdueDays`/`loan-extended` (PR #31/#32), +4 домена (PR #38) |
-| `agis-duplicate-income` | 3.3.0 | v1.3.0 | Волна 2 (PR #18), Волна 3 — `ruMonthNumber()` ядра (PR #25). Волна 5: `cellText` из ядра (PR #34), `resolveGateway`/`normalizeDate` под тестами (PR #35), фикс шлюза ФИНСТАР (PR #39), +4 домена (PR #38) |
-| `agis-protocol-income-fill` | 2.2.0 | v1.3.0 | Волна 2 (PR #22). Волна 5: `normalizeText`/`cellText` из ядра (PR #34), `getHeaderMap` под jsdom-фикстурой (PR #36), +4 домена (PR #38) |
-| `agis-add-income-from-googlesheet` | 4.6 | v1.1.0 | Волна 2 (PR #19) — баги заполнения формы (селекторы без тега, нативный сеттер `value`). +4 домена (PR #38) |
+| `agis-loan-info-navbar` | 5.6.1 | v1.4.0 | Волна 2 (PR #20), Волна 3 — `ruMonthNumber()` ядра (PR #24). Волна 5: `normalizeText`/`cellText` из ядра (PR #34), фикс `overdueDays`/`loan-extended` (PR #31/#32), +4 домена (PR #38). Ядро → v1.4.0 без изменения логики |
+| `agis-duplicate-income` | 3.3.1 | v1.4.0 | Волна 2 (PR #18), Волна 3 — `ruMonthNumber()` ядра (PR #25). Волна 5: `cellText` из ядра (PR #34), `resolveGateway`/`normalizeDate` под тестами (PR #35), фикс шлюза ФИНСТАР (PR #39), +4 домена (PR #38). Ядро → v1.4.0 без изменения логики; добавлены `@updateURL`/`@downloadURL`; migration-логи безусловные |
+| `agis-protocol-income-fill` | 2.2.1 | v1.4.0 | Волна 2 (PR #22). Волна 5: `normalizeText`/`cellText` из ядра (PR #34), `getHeaderMap` под jsdom-фикстурой (PR #36), +4 домена (PR #38). Ядро → v1.4.0 без изменения логики |
+| `agis-add-income-from-googlesheet` | 4.7 | v1.4.0 | Волна 2 (PR #19) — баги заполнения формы (селекторы без тега, нативный сеттер `value`). +4 домена (PR #38). Ядро → v1.4.0 без изменения логики; добавлены `@updateURL`/`@downloadURL`; migration-логи безусловные |
 | `agis-paste-cleaner-amount` | 1.11 | v1.4.0 | Волна 2 (PR #13/#14) — пилот `@require`. +4 домена (PR #38). Ядро v1.0.0 → v1.4.0 без изменения логики |
-| `agis-linkify-loan-note` | 3.4 | v1.4.0 | Волна 2 (PR #15), debug-toggle await-фикс (PR #21). +4 домена (PR #38). Ядро v1.0.0 → v1.4.0 без изменения логики |
-| `agis-rusupport-clipboard` | 2.3.1 | v1.4.0 | Волна 2 (PR #16), debug-toggle await-фикс (PR #21). +4 домена (PR #38). Ядро v1.0.0 → v1.4.0 без изменения логики |
+| `agis-linkify-loan-note` | 3.5 | v1.4.0 | Волна 2 (PR #15), debug-toggle await-фикс (PR #21). +4 домена (PR #38). Ядро v1.0.0 → v1.4.0 без изменения логики; добавлены `@updateURL`/`@downloadURL` |
+| `agis-rusupport-clipboard` | 2.3.2 | v1.4.0 | Волна 2 (PR #16), debug-toggle await-фикс (PR #21). +4 домена (PR #38). Ядро v1.0.0 → v1.4.0 без изменения логики; добавлены `@updateURL`/`@downloadURL` |
 | `agis-fix-date-format` | 1.2 | v1.4.0 | Добавлен позже, вне исходных волн — исправляет ввод даты в полях `date`/`datetime-local`. +4 домена (PR #38). Ядро v1.0.0 → v1.4.0 без изменения логики |
 | `agis-deposit-refund` | 2.1.0 | v1.4.0 | Добавлен вне волн как автономный скрипт (1.3.0), мигрирован на ядро в 2.0.0 — свои `waitForElement`/storage/URL-observer заменены на `waitForCondition` (новое в ядре v1.4.0), `storage*`, `onUrlChange`, `showBanner`, `registerDebugToggle`, route-токены. Покрыт unit-тестами (18). В 2.1.0 `@match` расширён до всех 11 доменов — см. «Оставшиеся расхождения» |
 
@@ -53,10 +53,10 @@ googlesheet — заполнение формы не работало из-за 
 рискуя пропустить первый SPA-переход, и migration-логи в трёх скриптах
 (googlesheet/duplicate-income/protocol-income-fill) гейтированы debug-флагом,
 который на момент их вызова ещё не резолвится, — то есть никогда не печатаются
-(в protocol-income-fill исправлено на безусловный `console.log`, в двух других
-пока оставлено как есть). Все найдены и закрыты (кроме двух последних
-migration-логов) в ходе ручной browser-проверки и внешнего code review перед
-мержем каждого PR.
+(исправлено на безусловный `console.log` — сначала в protocol-income-fill, затем
+в googlesheet/duplicate-income в PR выравнивания на ядро v1.4.0). Все найдены и
+закрыты в ходе ручной browser-проверки и внешнего code review перед мержем
+каждого PR.
 
 ---
 
