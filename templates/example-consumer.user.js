@@ -1,20 +1,29 @@
 // ==UserScript==
 // @name         Example Consumer of lib/agis-core.js
-// @namespace    domain.feature        // <- заменить: например agis.loaninfo
-// @version      0.2
+// @namespace    domain.feature
+// @version      0.3
 // @description  Пример потребителя общего ядра: ожидание DOM, кэш, сеть, SPA-навигация, debug-toggle
 // @author       me
-// @match        https://example.com/path/*    // <- заменить на реальный домен
+// @match        https://example.com/path/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=example.com
-// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.4.0/lib/agis-core.js#sha256=JqxyWNETCOHKc6WMlT3E/6odW4N9iDA7zsnIOVz6uys=  // <- ОБНОВИТЬ тег и sha256 на актуальные (git tag -l) перед использованием этого шаблона
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.4.0/lib/agis-core.js#sha256=JqxyWNETCOHKc6WMlT3E/6odW4N9iDA7zsnIOVz6uys=
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
 // @grant        GM_registerMenuCommand
-// @connect      example.com            // <- по одному @connect на каждый хост, не *
+// @connect      example.com
 // ==/UserScript==
+
+// Перед использованием шаблона заменить в метаблоке выше. Подсказки вынесены сюда,
+// а не в конец строк директив: Tampermonkey читает значение до конца строки,
+// и хвост «// ...» попал бы в @match/@require/@connect как часть значения.
+//   @namespace — уникальный, формат agis.<feature> (например agis.loaninfo)
+//   @match     — реальные домены/пути AGIS, никогда *://*/*
+//   @require   — актуальный тег ядра и его sha256 (git tag -l; строка @require
+//                в любом недавно мигрированном scripts/*.user.js)
+//   @connect   — по одному на каждый хост для GM_xmlhttpRequest, никогда *
 
 // Этот файл — не переиспользуемая библиотека, а ЖИВОЙ ПРИМЕР того, как писать
 // новый скрипт поверх lib/agis-core.js. Копируй структуру, а не копируй код
