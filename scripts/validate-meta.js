@@ -116,7 +116,7 @@ function matchHost(matchValue) {
 // зеркала jsDelivr, refs/tags/..., другой регистр, хвост-комментарий в строке и т.п.).
 const CORE_MARKER_RE = /agis-core\.js/i;
 const CORE_REQUIRE_RE =
-  /^https:\/\/raw\.githubusercontent\.com\/vicgor\/tampermonkey-scripts\/([^/]+)\/lib\/agis-core\.js(?:#(.*))?$/;
+  /^https:\/\/raw\.githubusercontent\.com\/vicgor\/tampermonkey-scripts\/([^/]+)\/lib\/agis-core\.js(?:#(\S*))?$/;
 // Только релизные теги vX.Y.Z — пре-релизы (v1.5.0-rc1) намеренно не принимаются.
 const TAG_RE = /^v\d+\.\d+\.\d+$/;
 
@@ -274,6 +274,8 @@ function validateFile(file, content, namespaceRegistry) {
   const core = checkCoreRequires(fields.require || []);
   errors.push(...core.errors);
   // Все production-скрипты работают на ядре (CLAUDE.md) — отсутствие @require ядра = ошибка.
+  // Если когда-нибудь появится скрипт без ядра — не ослаблять правило для всех, а завести
+  // явный список исключений (Set имён файлов) рядом с этой проверкой, с комментарием почему.
   if (core.checked === 0)
     errors.push('нет @require на lib/agis-core.js — все scripts/*.user.js обязаны подключать ядро');
 
@@ -344,5 +346,5 @@ if (require.main === module) {
   main();
 } else {
   // Для vitest (test/scripts/validate-meta.test.js).
-  module.exports = { checkCoreRequires, extractSha256, parseMetablock, sha256, sriMatches };
+  module.exports = { checkCoreRequires, extractSha256, parseMetablock, sha256, sriMatches, validateFile };
 }

@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { createHash } from 'crypto';
-import { checkCoreRequires, extractSha256, parseMetablock, sha256, sriMatches } from '../../scripts/validate-meta.js';
+import {
+  checkCoreRequires,
+  extractSha256,
+  parseMetablock,
+  sha256,
+  sriMatches,
+  validateFile,
+} from '../../scripts/validate-meta.js';
 
 // Фейковое «ядро в теге» — тесты не зависят от реальных git-тегов в чекауте.
 const CORE = Buffer.from('/* agis-core */\n');
@@ -66,6 +73,7 @@ describe('checkCoreRequires', () => {
     const { errors, checked } = check([url]);
     expect(checked).toBe(1);
     expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('нестандартная ссылка');
   });
 
   it('чужие @require не проверяются и не считаются', () => {
@@ -90,5 +98,20 @@ describe('extractSha256 / sriMatches', () => {
 
   it('hex сравнивается без учёта регистра', () => {
     expect(sriMatches(HEX.toUpperCase(), sha256(CORE))).toBe(true);
+  });
+});
+
+describe('validateFile', () => {
+  it('скрипт без @require на ядро — ошибка («0 проверенных ссылок» не равно OK)', () => {
+    const content = [
+      '// ==UserScript==',
+      '// @namespace    agis.test',
+      '// @match        https://agis.credit7.ru/admin/*',
+      '// @grant        none',
+      '// ==/UserScript==',
+      '',
+    ].join('\n');
+    const { errors } = validateFile('x.user.js', content, {});
+    expect(errors.some((e) => e.includes('нет @require на lib/agis-core.js'))).toBe(true);
   });
 });
