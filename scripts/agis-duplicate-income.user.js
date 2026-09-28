@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - дублировать приход
 // @namespace    agis.duplicate.income
-// @version      3.3.1
+// @version      3.3.2
 // @description  Клик по строке прихода → открыть форму создания и автозаполнить (дата, шлюз, внешний ID, сумма). Ручное подтверждение.
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*/*/income/*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan*/*/income/*
@@ -97,7 +97,6 @@
   ruMonthNumber = window.__AGIS_CORE__.ruMonthNumber;
 
   const SCRIPT_NS = 'agis:duplicate-income';
-  const DOM_NS = 'agis-duplicate-income'; // без двоеточия — для CSS/id, если понадобятся
   const STORAGE_KEY = 'agis:duplicate-income:payload:v1';
   const DEBUG_KEY = 'agis:duplicate-income:debug';
   const WAIT_TIMEOUT = 15000;

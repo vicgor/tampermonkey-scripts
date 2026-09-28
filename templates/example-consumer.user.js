@@ -97,12 +97,12 @@
     return null;
   }
 
-  function parseDoc(doc) {
+  function parseDoc(_doc) {
     // TODO: разбор HTML-документа, полученного через api.getHtml (бэкенд-фолбэк)
     return null;
   }
 
-  function render(data, targetEl) {
+  function render(_data, _targetEl) {
     // TODO: рендер данных в DOM
   }
 
