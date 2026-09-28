@@ -15,7 +15,8 @@ vashcash, ikracredit, zaimix, finrook).
 `npm run lint`/`format`/`test`) — не для сборки: скрипты по-прежнему ставятся
 в Tampermonkey как есть, без бандлинга. `.github/workflows/ci.yml` на каждый
 PR и push в `main` гоняет `npm run lint`, `npm run format:check`, `npm test`,
-`npm run validate-meta` (метаблок: `@grant`/`@connect`/`@namespace`/`@match`)
+`npm run validate-meta` (метаблок: `@grant`/`@connect`/`@namespace`/`@match`,
+плюс SRI-хеш `@require` ядра против файла в git-теге)
 и `npm run check-version-bump` (в PR-контексте) — если CI зелёный, повторно
 гонять вручную перед мержем не нужно. `npm test` (vitest) покрывает только
 чистые парсеры/форматтеры и DOM-парсеры через `jsdom` — само поведение
