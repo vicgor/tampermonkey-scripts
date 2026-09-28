@@ -29,7 +29,7 @@ SRI-хеш (это уже не «канон на бумаге»); все скр�
 | `agis-linkify-loan-note` | 3.5 | v1.4.0 | Волна 2 (PR #15), debug-toggle await-фикс (PR #21). +4 домена (PR #38). Ядро v1.0.0 → v1.4.0 без изменения логики; добавлены `@updateURL`/`@downloadURL` |
 | `agis-rusupport-clipboard` | 2.3.2 | v1.4.0 | Волна 2 (PR #16), debug-toggle await-фикс (PR #21). +4 домена (PR #38). Ядро v1.0.0 → v1.4.0 без изменения логики; добавлены `@updateURL`/`@downloadURL` |
 | `agis-fix-date-format` | 1.2 | v1.4.0 | Добавлен позже, вне исходных волн — исправляет ввод даты в полях `date`/`datetime-local`. +4 домена (PR #38). Ядро v1.0.0 → v1.4.0 без изменения логики |
-| `agis-deposit-refund` | 2.1.0 | v1.4.0 | Добавлен вне волн как автономный скрипт (1.3.0), мигрирован на ядро в 2.0.0 — свои `waitForElement`/storage/URL-observer заменены на `waitForCondition` (новое в ядре v1.4.0), `storage*`, `onUrlChange`, `showBanner`, `registerDebugToggle`, route-токены. Покрыт unit-тестами (18). В 2.1.0 `@match` расширён до всех 11 доменов — см. «Оставшиеся расхождения» |
+| `agis-deposit-refund` | 2.2.0 | v1.4.0 | Добавлен вне волн как автономный скрипт (1.3.0), мигрирован на ядро в 2.0.0 — свои `waitForElement`/storage/URL-observer заменены на `waitForCondition` (новое в ядре v1.4.0), `storage*`, `onUrlChange`, `showBanner`, `registerDebugToggle`, route-токены. Покрыт unit-тестами (18). В 2.1.0 `@match` расширён до всех 11 доменов — см. «Оставшиеся расхождения». В 2.2.0 — запасной источник суммы: `<dt>Депозит</dt>` блока «Сумма» (volgazaim и др. бренды без «ДС на счету»), jsdom-тест на фикстуре |
 
 **Оставшиеся расхождения:**
 
