@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         AGIS - возврат депозита
 // @namespace    agis.deposit.refund
-// @version      2.1.0
-// @description  Находит «ДС на счету» на странице займа → кнопка «Вернуть депозит» → открывает форму транзакции и автозаполняет сумму, направление OUT и тип «Возврат депозита». Отправка формы — только вручную.
+// @version      2.2.0
+// @description  Находит «ДС на счету» (или «Депозит» в блоке «Сумма») на странице займа → кнопка «Вернуть депозит» → открывает форму транзакции и автозаполняет сумму, направление OUT и тип «Возврат депозита». Отправка формы — только вручную.
 // @match        https://agis.credit7.ru/admin/agis2/core/loan/*
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*
 // @match        https://agis.belkacredit.ru/admin/agis2/core/loan/*
@@ -56,6 +56,8 @@
       formatAmountForInput,
       normalizeComparable,
       extractDepositFromText,
+      extractDepositFromDefinitionList,
+      findDepositIn,
       scoreFieldDescription,
       isPayloadUsable,
     };
@@ -155,6 +157,32 @@
     return { kopecks, sourceText: normalizeText(match[0]) };
   }
 
+  // Запасной источник: строка «Депозит» в блоке «Сумма» карточки займа — разметка
+  // <dt>Депозит</dt><dd>2 800,00 ₽</dd> (volgazaim и др. бренды, где «ДС на счету» нет,
+  // см. fixtures/agis-loan-edit.html). Ищем dt по точному тексту, а не по позиции:
+  // соседние dt («Фикс. штраф») бывают скрыты display:none и сдвигают порядок.
+  function extractDepositFromDefinitionList(root) {
+    if (!root?.querySelectorAll) return null;
+    for (const dt of root.querySelectorAll('dt')) {
+      if (normalizeComparable(dt.textContent) !== 'депозит') continue;
+      const dd = dt.nextElementSibling;
+      if (!dd || dd.tagName !== 'DD') continue;
+      const kopecks = parseMoneyToKopecks(dd.textContent);
+      if (kopecks === null) continue;
+      return { kopecks, sourceText: `Депозит: ${normalizeText(dd.textContent)}` };
+    }
+    return null;
+  }
+
+  // Приоритет: «ДС на счету» (прежнее поведение, проверено на moneymania) →
+  // «Депозит» из блока «Сумма». Порядок не меняем, чтобы не сломать бренды, где есть оба.
+  function findDepositIn(root) {
+    if (!root) return null;
+    const fromText = extractDepositFromText(root.innerText || root.textContent || '');
+    if (fromText) return fromText;
+    return extractDepositFromDefinitionList(root);
+  }
+
   function scoreFieldDescription(description, patterns) {
     let score = 0;
     for (const pattern of patterns) {
@@ -177,8 +205,7 @@
   }
 
   function findDeposit() {
-    if (!document.body) return null;
-    return extractDepositFromText(document.body.innerText || document.body.textContent || '');
+    return findDepositIn(document.body);
   }
 
   function applyStyles(element, styles) {
@@ -286,12 +313,12 @@
     try {
       const deposit = await waitForCondition(findDeposit, {
         timeout: WAIT_TIMEOUT,
-        describe: '«ДС на счету» на карточке займа',
+        describe: '«ДС на счету» / «Депозит» на карточке займа',
       });
       if (!routeTokenController.isCurrent(token)) return;
       renderRefundButton(route, deposit, token);
     } catch (error) {
-      warn('Не удалось найти «ДС на счету»:', error);
+      warn('Не удалось найти «ДС на счету» / «Депозит»:', error);
     }
   }
 
