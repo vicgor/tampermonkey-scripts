@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS Инфо о займе (все страницы)
 // @namespace    agis.loaninfo
-// @version      5.6.1
+// @version      5.6.2
 // @description  Полноширинная строка под навбаром с информацией о займе и цветным статусом
 // @icon         https://agis.creditsmile.ru/favicon.ico
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*
@@ -124,9 +124,9 @@
   ruMonthNumber = window.__AGIS_CORE__.ruMonthNumber;
   normalizeText = window.__AGIS_CORE__.normalizeText;
 
-  // Стандарт репо: SCRIPT_NS = agis:<feature> (для лога и storage), DOM_NS — без двоеточия (для CSS/id).
+  // Стандарт репо: SCRIPT_NS = agis:<feature> (для лога и storage). DOM_NS (без двоеточия, для CSS/id)
+  // здесь не заводится — id панели исторический (BAR_ID ниже).
   const SCRIPT_NS = 'agis:loan-info';
-  const DOM_NS = 'agis-loan-info';
   // BAR_ID остаётся в прежнем виде — не трогаем CSS-селекторы, которые могут быть в коде.
   const BAR_ID = 'cs-loan-bar';
   // Fallback-цепочка: пробуем селекторы по очереди, возвращаем первый найденный
