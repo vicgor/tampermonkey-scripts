@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - вставка прихода из операций по карте
 // @namespace    agis.creditcardoperation.income.fill
-// @version      1.1.0
+// @version      1.1.1
 // @description  Клик по входящей операции на странице «Операции по карте» займа сохраняет дату, сумму, номер операции и шлюз; переход на список приходов; на форме создания прихода кнопка вставки заполняет поля.
 // @match        https://agis.volgazaim.ru/admin/agis2/core/*/creditcardoperation/list*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/*/income/list*
@@ -77,15 +77,17 @@
   // через дни можно молча вставить давно забытую операцию.
   const PAYLOAD_TTL_MS = 30 * 60 * 1000;
 
-  // normalizeText/ruMonthNumber — из ядра, назначаются в одной из двух веток ниже
+  // normalizeText/cellText/ruMonthNumber — из ядра, назначаются в одной из двух веток ниже
   // (та же схема, что в agis-protocol-income-fill/agis-duplicate-income).
   let normalizeText;
+  let cellText;
   let ruMonthNumber;
 
   // Тестовый экспорт для vitest (test/scripts/agis-creditcardoperation-income-fill*.test.js).
   if (typeof process !== 'undefined' && process.versions?.node && typeof module !== 'undefined' && module.exports) {
     const core = require('../lib/agis-core.js');
     normalizeText = core.normalizeText;
+    cellText = core.cellText;
     ruMonthNumber = core.ruMonthNumber;
     module.exports = {
       parseAmount,
@@ -94,6 +96,7 @@
       isIncomingOperation,
       isPayloadFresh,
       getHeaderMap,
+      extractOperation,
     };
     return;
   }
@@ -114,9 +117,9 @@
     createRouteTokenController,
     showBanner,
     registerDebugToggle,
-    cellText,
   } = window.__AGIS_CORE__;
   normalizeText = window.__AGIS_CORE__.normalizeText;
+  cellText = window.__AGIS_CORE__.cellText;
   ruMonthNumber = window.__AGIS_CORE__.ruMonthNumber;
 
   const SCRIPT_NS = 'agis:cco-income';
@@ -201,6 +204,18 @@
     return result;
   }
 
+  // Отсутствующая колонка (индекс undefined) даёт пустую строку — cellText(undefined) === ''.
+  function extractOperation(cells, colIndex) {
+    return {
+      operationType: cellText(cells[colIndex.operationType]),
+      incomeDate: normalizeDate(cellText(cells[colIndex.processedAt])),
+      amount: parseAmount(cellText(cells[colIndex.amount])),
+      orderReference: cellText(cells[colIndex.orderReference]),
+      gateway: cellText(cells[colIndex.gateway]),
+      status: cellText(cells[colIndex.status]),
+    };
+  }
+
   function getLoanRouteFromUrl() {
     const match = location.pathname.match(/\/admin\/agis2\/core\/([a-z-]+)\/(\d+)\/(?:creditcardoperation|income)\//i);
     return match ? { type: match[1], loanId: match[2] } : null;
@@ -240,8 +255,8 @@
 
     rows.forEach((tr) => {
       if (tr.dataset.agisCcoIncomeBound === '1') return;
-      const cells = tr.children;
-      if (!isIncomingOperation(cellText(cells[colIndex.operationType]))) return;
+      const operation = extractOperation(tr.children, colIndex);
+      if (!isIncomingOperation(operation.operationType)) return;
 
       tr.dataset.agisCcoIncomeBound = '1';
       tr.classList.add(`${DOM_NS}-row`);
@@ -253,21 +268,12 @@
         event.preventDefault();
 
         const route = getLoanRouteFromUrl();
-        const status = colIndex.status !== undefined ? cellText(cells[colIndex.status]) : '';
-        const payload = {
-          loanId: route?.loanId ?? '',
-          incomeDate: normalizeDate(cellText(cells[colIndex.processedAt])),
-          amount: parseAmount(cellText(cells[colIndex.amount])),
-          orderReference: colIndex.orderReference !== undefined ? cellText(cells[colIndex.orderReference]) : '',
-          gateway: colIndex.gateway !== undefined ? cellText(cells[colIndex.gateway]) : '',
-          status,
-          savedAt: Date.now(),
-        };
+        const payload = { loanId: route?.loanId ?? '', ...operation, savedAt: Date.now() };
         log('Пайлоад:', payload);
 
         // COMPLETED-операция обычно уже превратилась в приход автоматически — ручной создаст дубль.
         if (
-          status.toUpperCase() === 'COMPLETED' &&
+          payload.status.toUpperCase() === 'COMPLETED' &&
           !confirm(
             `Операция ${payload.orderReference} в статусе COMPLETED — приход по ней, скорее всего, уже создан.\n` +
               'Проверьте список приходов. Всё равно сохранить данные?',
