@@ -1,0 +1,214 @@
+<!--
+  Кусок страницы /admin/agis2/core/loan-overdue/<id>/creditcardoperation/list AGIS
+  (creditsmile), сохранённый из браузера пользователем репозитория: только таблица списка,
+  4 строки. Разметка и структура реальные (убраны лишь пустые строки, хвостовые пробелы и
+  многосотсимвольные отступы Twig) — см. test/scripts/agis-creditcardoperation-income-fill.dom.test.js.
+  Данные обезличены: ID займа/операций, хвосты номеров операций, «Номер в банке», суммы и
+  дни/время дат заменены синтетическими. Реальными оставлены коды типов/статусов/шлюзов,
+  формат сумм и дат (включая неразрывные пробелы) — то, что проверяет тест.
+
+  Реальные находки: в ячейках «Тип»/«Статус»/«Платежный шлюз» — сырые коды
+  (repayment/COMPLETED/siab_bank), не переводы; дата рендерится сервером в <time> с
+  текстом в часовом поясе админки (datetime-атрибут — UTC), поэтому скрипт берёт текст.
+-->
+<!DOCTYPE html>
+<html>
+<body>
+
+        <table class="table table-bordered table-striped table-hover sonata-ba-list">
+        <thead>
+        <tr class="sonata-ba-list-field-header">
+        <th class="sonata-ba-list-field-header-string sonata-ba-list-field-header-order-asc "><a href="/admin/agis2/core/loan-overdue/99999999/creditcardoperation/list?filter%5B_page%5D=1&amp;filter%5B_per_page%5D=25&amp;filter%5Bloan%5D%5Bvalue%5D=99999999&amp;filter%5B_sort_order%5D=ASC&amp;filter%5B_sort_by%5D=id&amp;_list_mode=list">
+        ID
+        </a></th>
+        <th class="sonata-ba-list-field-header-currency sonata-ba-list-field-header-order-asc "><a href="/admin/agis2/core/loan-overdue/99999999/creditcardoperation/list?filter%5B_page%5D=1&amp;filter%5B_per_page%5D=25&amp;filter%5Bloan%5D%5Bvalue%5D=99999999&amp;filter%5B_sort_order%5D=ASC&amp;filter%5B_sort_by%5D=amount&amp;_list_mode=list">
+        Сумма
+        </a></th>
+        <th class="sonata-ba-list-field-header-string">
+        Счет получателя
+        </th>
+        <th class="sonata-ba-list-field-header-string">
+        Номер операции
+        </th>
+        <th class="sonata-ba-list-field-header-string sonata-ba-list-field-header-order-asc "><a href="/admin/agis2/core/loan-overdue/99999999/creditcardoperation/list?filter%5B_page%5D=1&amp;filter%5B_per_page%5D=25&amp;filter%5Bloan%5D%5Bvalue%5D=99999999&amp;filter%5B_sort_order%5D=ASC&amp;filter%5B_sort_by%5D=paymentId&amp;_list_mode=list">
+        Номер в банке
+        </a></th>
+        <th class="sonata-ba-list-field-header-string sonata-ba-list-field-header-order-asc "><a href="/admin/agis2/core/loan-overdue/99999999/creditcardoperation/list?filter%5B_page%5D=1&amp;filter%5B_per_page%5D=25&amp;filter%5Bloan%5D%5Bvalue%5D=99999999&amp;filter%5B_sort_order%5D=ASC&amp;filter%5B_sort_by%5D=operationType&amp;_list_mode=list">
+        Тип
+        </a></th>
+        <th class="sonata-ba-list-field-header-string sonata-ba-list-field-header-order-asc "><a href="/admin/agis2/core/loan-overdue/99999999/creditcardoperation/list?filter%5B_page%5D=1&amp;filter%5B_per_page%5D=25&amp;filter%5Bloan%5D%5Bvalue%5D=99999999&amp;filter%5B_sort_order%5D=ASC&amp;filter%5B_sort_by%5D=transactionStatus&amp;_list_mode=list">
+        Статус
+        </a></th>
+        <th class="sonata-ba-list-field-header-textarea sonata-ba-list-field-header-order-asc "><a href="/admin/agis2/core/loan-overdue/99999999/creditcardoperation/list?filter%5B_page%5D=1&amp;filter%5B_per_page%5D=25&amp;filter%5Bloan%5D%5Bvalue%5D=99999999&amp;filter%5B_sort_order%5D=ASC&amp;filter%5B_sort_by%5D=error&amp;_list_mode=list">
+        Причина
+        </a></th>
+        <th class="sonata-ba-list-field-header-datetime sonata-ba-list-field-header-order-asc "><a href="/admin/agis2/core/loan-overdue/99999999/creditcardoperation/list?filter%5B_page%5D=1&amp;filter%5B_per_page%5D=25&amp;filter%5Bloan%5D%5Bvalue%5D=99999999&amp;filter%5B_sort_order%5D=ASC&amp;filter%5B_sort_by%5D=createdDate&amp;_list_mode=list">
+        Дата
+        </a></th>
+        <th class="sonata-ba-list-field-header-many_to_one">
+        Платежный шлюз
+        </th>
+        <th class="sonata-ba-list-field-header-string">
+        Переопросить
+        </th>                                                                                                            </tr>
+        </thead>
+        <tbody>
+<tr>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000001">
+        10000001
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-currency" objectId="10000001">
+    10 000,00 ₽
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000001">
+        <i class="fa fa-bank" aria-hidden="true"></i>
+        <span class="text-muted">
+        СБП
+        Сбербанк
+        </span>
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000001">
+        L-99999999-OUT-00000000000001
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000001">
+        0000000000
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000001">
+        money_transfer
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000001">
+        COMPLETED
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-textarea" objectId="10000001">
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-datetime" objectId="10000001">
+<time datetime="2026-07-15T09:10:11+00:00" title="2026-07-15T09:10:11+00:00">15 июл. 2026 г., 12:10:11</time>
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-many_to_one" objectId="10000001">
+        e2c
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000001">
+        <a class="btn btn-sm btn-primary"
+   href="/admin/agis2/core/creditcardoperation/card-operation-sync?id=10000001">
+    <i class="fa fa-refresh" aria-hidden="true"></i>
+    Переопросить
+</a>
+        </td>
+    </tr>
+<tr>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000002">
+        10000002
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-currency" objectId="10000002">
+    1 234,00 ₽
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000002">
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000002">
+        L-99999999-IN-00000000000002
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000002">
+        00000000-0000-0000-0000-000000000001
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000002">
+        repayment
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000002">
+        PROCESSING
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-textarea" objectId="10000002">
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-datetime" objectId="10000002">
+<time datetime="2026-08-12T07:20:21+00:00" title="2026-08-12T07:20:21+00:00">12 авг. 2026 г., 10:20:21</time>
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-many_to_one" objectId="10000002">
+        siab_bank
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000002">
+        <a class="btn btn-sm btn-primary"
+   href="/admin/agis2/core/creditcardoperation/card-operation-sync?id=10000002">
+    <i class="fa fa-refresh" aria-hidden="true"></i>
+    Переопросить
+</a>
+        </td>
+    </tr>
+<tr>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000003">
+        10000003
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-currency" objectId="10000003">
+    1 234,00 ₽
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000003">
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000003">
+        L-99999999-IN-00000000000003
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000003">
+        00000000-0000-0000-0000-000000000002
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000003">
+        repayment
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000003">
+        COMPLETED
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-textarea" objectId="10000003">
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-datetime" objectId="10000003">
+<time datetime="2026-08-12T12:30:31+00:00" title="2026-08-12T12:30:31+00:00">12 авг. 2026 г., 15:30:31</time>
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-many_to_one" objectId="10000003">
+        siab_bank
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000003">
+        <a class="btn btn-sm btn-primary"
+   href="/admin/agis2/core/creditcardoperation/card-operation-sync?id=10000003">
+    <i class="fa fa-refresh" aria-hidden="true"></i>
+    Переопросить
+</a>
+        </td>
+    </tr>
+<tr>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000004">
+        10000004
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-currency" objectId="10000004">
+    2 345,00 ₽
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000004">
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000004">
+        L-99999999-IN-00000000000004
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000004">
+        00000000-0000-0000-0000-000000000003
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000004">
+        repayment
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000004">
+        REJECTED
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-textarea" objectId="10000004">
+        Not sufficient funds
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-datetime" objectId="10000004">
+<time datetime="2026-09-04T03:40:41+00:00" title="2026-09-04T03:40:41+00:00">4 сент. 2026 г., 06:40:41</time>
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-many_to_one" objectId="10000004">
+        siab_bank
+        </td>
+<td class="sonata-ba-list-field sonata-ba-list-field-string" objectId="10000004">
+        <a class="btn btn-sm btn-primary"
+   href="/admin/agis2/core/creditcardoperation/card-operation-sync?id=10000004">
+    <i class="fa fa-refresh" aria-hidden="true"></i>
+    Переопросить
+</a>
+        </td>
+    </tr>
+        </tbody>
+        </table>
+
+</body>
+</html>

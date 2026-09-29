@@ -157,6 +157,7 @@ module.exports = [
       'scripts/agis-protocol-income-fill.user.js',
       'scripts/agis-duplicate-income.user.js',
       'scripts/agis-deposit-refund.user.js',
+      'scripts/agis-creditcardoperation-income-fill.user.js',
     ],
     languageOptions: {
       globals: { require: 'readonly' },
