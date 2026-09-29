@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - вставка прихода из операций по карте
 // @namespace    agis.creditcardoperation.income.fill
-// @version      1.0.0
+// @version      1.1.0
 // @description  Клик по входящей операции на странице «Операции по карте» займа сохраняет дату, сумму, номер операции и шлюз; переход на список приходов; на форме создания прихода кнопка вставки заполняет поля.
 // @match        https://agis.volgazaim.ru/admin/agis2/core/*/creditcardoperation/list*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/*/income/list*
@@ -73,6 +73,10 @@
   // приходом. money_transfer — выдача, verification — привязка карты.
   const INCOMING_OPERATION_TYPES = new Set(['repayment', 'rebill_payment']);
 
+  // Скопированная операция старше этого срока не вставляется: иначе на форме того же займа
+  // через дни можно молча вставить давно забытую операцию.
+  const PAYLOAD_TTL_MS = 30 * 60 * 1000;
+
   // normalizeText/ruMonthNumber — из ядра, назначаются в одной из двух веток ниже
   // (та же схема, что в agis-protocol-income-fill/agis-duplicate-income).
   let normalizeText;
@@ -83,7 +87,14 @@
     const core = require('../lib/agis-core.js');
     normalizeText = core.normalizeText;
     ruMonthNumber = core.ruMonthNumber;
-    module.exports = { parseAmount, normalizeDate, resolveIncomeType, isIncomingOperation, getHeaderMap };
+    module.exports = {
+      parseAmount,
+      normalizeDate,
+      resolveIncomeType,
+      isIncomingOperation,
+      isPayloadFresh,
+      getHeaderMap,
+    };
     return;
   }
 
@@ -155,6 +166,23 @@
 
   function isIncomingOperation(operationType) {
     return INCOMING_OPERATION_TYPES.has(normalizeText(operationType).toLowerCase());
+  }
+
+  function isPayloadFresh(payload, now) {
+    if (!payload || typeof payload !== 'object' || !Number.isFinite(payload.savedAt)) return false;
+    const ageMs = now - payload.savedAt;
+    return ageMs >= 0 && ageMs <= PAYLOAD_TTL_MS;
+  }
+
+  // Просроченный payload удаляется сразу, чтобы кнопка больше не появлялась.
+  async function loadFreshPayload() {
+    const payload = await storageGet(STORAGE_KEY, null);
+    if (isPayloadFresh(payload, Date.now())) return payload;
+    if (payload) {
+      await storageDelete(STORAGE_KEY);
+      log('Сохранённая операция просрочена — удалена:', payload);
+    }
+    return null;
   }
 
   // Точное сравнение заголовков: "Номер операции"/"Номер в банке" и "Сумма"/"Счет получателя"
@@ -233,6 +261,7 @@
           orderReference: colIndex.orderReference !== undefined ? cellText(cells[colIndex.orderReference]) : '',
           gateway: colIndex.gateway !== undefined ? cellText(cells[colIndex.gateway]) : '',
           status,
+          savedAt: Date.now(),
         };
         log('Пайлоад:', payload);
 
@@ -248,12 +277,6 @@
         }
 
         await storageSet(STORAGE_KEY, payload);
-
-        showBanner(
-          `Сохранено: займ ${payload.loanId || '-'}, дата ${payload.incomeDate || '-'}, сумма ${payload.amount || '-'}, ` +
-            `операция ${payload.orderReference || '-'}, шлюз ${payload.gateway || '-'}`,
-          { type: 'success', durationMs: 2500 },
-        );
 
         if (!route) {
           warn('Не удалось определить займ из URL:', location.pathname);
@@ -322,14 +345,13 @@
     const typeOk = selectIncomeType(data.gateway);
 
     // Payload удаляется только при success — при частичном заполнении можно повторить.
-    const success = dateOk && amountOk && !loanMismatch;
+    // Несовпадение займа сюда не входит: пользователь уже подтвердил его выше.
+    const success = dateOk && amountOk && orderOk;
 
     showBanner(
       [
         loanMismatch ? `ВНИМАНИЕ: данные скопированы с займа ${data.loanId}, а форма — займа ${route.loanId}.` : '',
-        dateOk && amountOk && orderOk && typeOk
-          ? 'Поля заполнены — проверьте и нажмите «Предпросмотр».'
-          : 'Заполнено не всё.',
+        success && typeOk ? 'Поля заполнены — проверьте и нажмите «Предпросмотр».' : 'Заполнено не всё.',
         `Дата: ${dateOk ? 'OK' : 'нет'}`,
         `Номер заказа: ${orderOk ? 'OK' : 'нет'}`,
         `Тип: ${typeOk ? 'OK' : `выберите вручную (шлюз ${data.gateway || '-'})`}`,
@@ -337,7 +359,7 @@
       ]
         .filter(Boolean)
         .join(' '),
-      { type: success && orderOk && typeOk ? 'success' : 'error', durationMs: 7000 },
+      { type: success && typeOk ? 'success' : 'error', durationMs: 7000 },
     );
 
     log('Заполнено:', { data, dateOk, orderOk, amountOk, typeOk, loanMismatch });
@@ -379,9 +401,9 @@
   }
 
   async function initCreatePage(token) {
-    const stored = await storageGet(STORAGE_KEY, null);
+    const stored = await loadFreshPayload();
     if (!routeTokenController.isCurrent(token)) return;
-    if (!stored || typeof stored !== 'object') return;
+    if (!stored) return;
 
     try {
       await waitForElement('input[name$="[incomeDate]"]', { timeout: FORM_WAIT_TIMEOUT });
@@ -392,10 +414,10 @@
     if (!routeTokenController.isCurrent(token)) return;
 
     addFillButton(async () => {
-      const data = await storageGet(STORAGE_KEY, null);
-      if (!data || typeof data !== 'object') {
+      const data = await loadFreshPayload();
+      if (!data) {
         removeFillButton();
-        alert('Нет сохранённых данных.');
+        alert('Нет сохранённых данных (или они старше 30 минут) — скопируйте операцию заново.');
         return;
       }
 

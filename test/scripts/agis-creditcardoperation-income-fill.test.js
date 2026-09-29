@@ -4,15 +4,20 @@ import {
   normalizeDate,
   resolveIncomeType,
   isIncomingOperation,
+  isPayloadFresh,
 } from '../../scripts/agis-creditcardoperation-income-fill.user.js';
+
+// Явные коды символов: литеральные nbsp не видны в диффе.
+const NBSP = String.fromCharCode(0x00a0);
+const NARROW_NBSP = String.fromCharCode(0x202f);
 
 describe('parseAmount', () => {
   it('разбирает сумму с nbsp-разделителем тысяч, запятой и знаком рубля', () => {
-    expect(parseAmount('4 640,00 ₽')).toBe('4640.00');
+    expect(parseAmount(`4${NBSP}640,00${NBSP}₽`)).toBe('4640.00');
   });
 
   it('разбирает сумму с narrow nbsp (Intl.NumberFormat ru-RU)', () => {
-    expect(parseAmount('20 000,00 ₽')).toBe('20000.00');
+    expect(parseAmount(`20${NARROW_NBSP}000,00 ₽`)).toBe('20000.00');
   });
 
   it('возвращает пустую строку, если числа нет', () => {
@@ -62,5 +67,24 @@ describe('isIncomingOperation', () => {
   it('выдача и верификация карты — не приход', () => {
     expect(isIncomingOperation('money_transfer')).toBe(false);
     expect(isIncomingOperation('verification')).toBe(false);
+  });
+});
+
+describe('isPayloadFresh', () => {
+  const savedAt = 1_000_000;
+  const minuteMs = 60 * 1000;
+
+  it('свежий payload — в пределах 30 минут', () => {
+    expect(isPayloadFresh({ savedAt }, savedAt + 30 * minuteMs)).toBe(true);
+  });
+
+  it('просроченный payload', () => {
+    expect(isPayloadFresh({ savedAt }, savedAt + 30 * minuteMs + 1)).toBe(false);
+  });
+
+  it('payload без savedAt, с savedAt из будущего или не объект — не свежий', () => {
+    expect(isPayloadFresh({ amount: '100' }, savedAt)).toBe(false);
+    expect(isPayloadFresh({ savedAt }, savedAt - 1)).toBe(false);
+    expect(isPayloadFresh(null, savedAt)).toBe(false);
   });
 });
