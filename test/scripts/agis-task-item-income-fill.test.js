@@ -30,9 +30,27 @@ describe('parseParamLines', () => {
 });
 
 describe('parseAmount', () => {
-  it('нормализует сумму', () => {
+  it('нормализует простые суммы', () => {
     expect(parseAmount('119,74')).toBe('119.74');
     expect(parseAmount('0.25')).toBe('0.25');
+    expect(parseAmount('7.88')).toBe('7.88');
+    expect(parseAmount('1234.5')).toBe('1234.5');
+    expect(parseAmount('500')).toBe('500');
+  });
+
+  it('удаляет разделители тысяч (пробел, NBSP, точка, запятая)', () => {
+    expect(parseAmount('1 234,56')).toBe('1234.56');
+    expect(parseAmount('1\u00a0234,56')).toBe('1234.56');
+    expect(parseAmount('1.234,56')).toBe('1234.56');
+    expect(parseAmount('1,234.56')).toBe('1234.56');
+    expect(parseAmount('1.234')).toBe('1234');
+    expect(parseAmount('1 234 567')).toBe('1234567');
+  });
+
+  it('отрицательная сумма, текст вокруг, пустое значение', () => {
+    expect(parseAmount('Сумма: -50,25 руб.')).toBe('-50.25');
+    expect(parseAmount('нет чисел')).toBe('');
+    expect(parseAmount(undefined)).toBe('');
   });
 });
 
@@ -63,8 +81,22 @@ describe('resolveIncomeTypeOption', () => {
     expect(resolveIncomeTypeOption(options, 'цессия')).toBe('mi_cession');
     expect(resolveIncomeTypeOption(options, 'ЦЕССИЯ')).toBe('mi_cession');
   });
+  it('ключи INCOME_TYPE_MAP: cession, mi_cession', () => {
+    expect(resolveIncomeTypeOption(options, 'cession')).toBe('mi_cession');
+    expect(resolveIncomeTypeOption(options, 'mi_cession')).toBe('mi_cession');
+    expect(resolveIncomeTypeOption(options, 'mi_refund_product')).toBe('mi_refund_product');
+  });
+  it('NBSP и лишние пробелы нормализуются', () => {
+    expect(resolveIncomeTypeOption(options, '\u00a0цессия  ')).toBe('mi_cession');
+    expect(resolveIncomeTypeOption(options, 'возврат\u00a0 продукта')).toBe('mi_refund_product');
+  });
   it('незамапленный тип ищется по тексту опции', () => {
     expect(resolveIncomeTypeOption(options, 'tinkoff')).toBe('mi_tinkoff');
+    expect(resolveIncomeTypeOption(options, 'возврат')).toBe('mi_refund_product');
+  });
+  it('короткое значение не даёт частичного совпадения', () => {
+    expect(resolveIncomeTypeOption(options, 'и')).toBe('');
+    expect(resolveIncomeTypeOption(options, 'це')).toBe('');
   });
   it('нет совпадения → пусто', () => {
     expect(resolveIncomeTypeOption(options, 'неизвестно')).toBe('');

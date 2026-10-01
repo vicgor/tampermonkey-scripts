@@ -1,62 +1,40 @@
 // ==UserScript==
 // @name         AGIS - вставка прихода из результатов команды
 // @namespace    agis.task.item.income.fill
-// @version      1.0.0
+// @version      1.1.0
 // @description  Клик по строке результатов сервисной команды (agis2:income:create) сохраняет платёж; переход на приходы займа; на форме создания кнопка заполняет дату, сумму, вид прихода и комментарий.
 // @match        https://agis.volgazaim.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
-// @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*/income/list*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*/income/create*
-// @match        https://agis.volgazaim.ru/admin/agis2/core/loan-overdue/*/income/list*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @match        https://agis.creditsmile.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
-// @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*/income/list*
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*/income/create*
-// @match        https://agis.creditsmile.ru/admin/agis2/core/loan-overdue/*/income/list*
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @match        https://agis.moneymania.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
-// @match        https://agis.moneymania.ru/admin/agis2/core/loan/*/income/list*
 // @match        https://agis.moneymania.ru/admin/agis2/core/loan/*/income/create*
-// @match        https://agis.moneymania.ru/admin/agis2/core/loan-overdue/*/income/list*
 // @match        https://agis.moneymania.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @match        https://agis.berrycash.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
-// @match        https://agis.berrycash.ru/admin/agis2/core/loan/*/income/list*
 // @match        https://agis.berrycash.ru/admin/agis2/core/loan/*/income/create*
-// @match        https://agis.berrycash.ru/admin/agis2/core/loan-overdue/*/income/list*
 // @match        https://agis.berrycash.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @match        https://agis.belkacredit.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
-// @match        https://agis.belkacredit.ru/admin/agis2/core/loan/*/income/list*
 // @match        https://agis.belkacredit.ru/admin/agis2/core/loan/*/income/create*
-// @match        https://agis.belkacredit.ru/admin/agis2/core/loan-overdue/*/income/list*
 // @match        https://agis.belkacredit.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @match        https://agis.credit7.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
-// @match        https://agis.credit7.ru/admin/agis2/core/loan/*/income/list*
 // @match        https://agis.credit7.ru/admin/agis2/core/loan/*/income/create*
-// @match        https://agis.credit7.ru/admin/agis2/core/loan-overdue/*/income/list*
 // @match        https://agis.credit7.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @match        https://agis.credit365.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
-// @match        https://agis.credit365.ru/admin/agis2/core/loan/*/income/list*
 // @match        https://agis.credit365.ru/admin/agis2/core/loan/*/income/create*
-// @match        https://agis.credit365.ru/admin/agis2/core/loan-overdue/*/income/list*
 // @match        https://agis.credit365.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @match        https://agis.vashcash.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
-// @match        https://agis.vashcash.ru/admin/agis2/core/loan/*/income/list*
 // @match        https://agis.vashcash.ru/admin/agis2/core/loan/*/income/create*
-// @match        https://agis.vashcash.ru/admin/agis2/core/loan-overdue/*/income/list*
 // @match        https://agis.vashcash.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @match        https://agis.ikracredit.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
-// @match        https://agis.ikracredit.ru/admin/agis2/core/loan/*/income/list*
 // @match        https://agis.ikracredit.ru/admin/agis2/core/loan/*/income/create*
-// @match        https://agis.ikracredit.ru/admin/agis2/core/loan-overdue/*/income/list*
 // @match        https://agis.ikracredit.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @match        https://agis.zaimix.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
-// @match        https://agis.zaimix.ru/admin/agis2/core/loan/*/income/list*
 // @match        https://agis.zaimix.ru/admin/agis2/core/loan/*/income/create*
-// @match        https://agis.zaimix.ru/admin/agis2/core/loan-overdue/*/income/list*
 // @match        https://agis.zaimix.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @match        https://agis.finrook.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
-// @match        https://agis.finrook.ru/admin/agis2/core/loan/*/income/list*
 // @match        https://agis.finrook.ru/admin/agis2/core/loan/*/income/create*
-// @match        https://agis.finrook.ru/admin/agis2/core/loan-overdue/*/income/list*
 // @match        https://agis.finrook.ru/admin/agis2/core/loan-overdue/*/income/create*
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-task-item-income-fill.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-task-item-income-fill.user.js
@@ -117,7 +95,11 @@
   const SCRIPT_NS = 'agis:task-item-income';
   // Префикс для id/классов DOM (без двоеточия — не ломает CSS-селекторы).
   const DOM_NS = 'agis-task-item-income';
-  const STORAGE_KEY = 'agis:task-item-income:payload:v1';
+  // v2: incomeDate хранится сырым (как в параметрах), в формат формы переводится при вставке.
+  const STORAGE_KEY = 'agis:task-item-income:payload:v2';
+  const LEGACY_STORAGE_KEY = 'agis:task-item-income:payload:v1';
+  // Срок жизни сохранённого платежа — старый payload не должен всплыть через дни.
+  const PAYLOAD_TTL_MS = 30 * 60 * 1000;
   const DEBUG_KEY = 'agis:task-item-income:debug';
   const WAIT_TIMEOUT = 15000;
   const FORM_WAIT_TIMEOUT = 10000;
@@ -153,11 +135,19 @@
     return result;
   }
 
+  // Сумма → строка с точкой как десятичным разделителем.
+  // Десятичный разделитель — последний «.»/«,», после которого 1–2 цифры до конца числа;
+  // остальные «.», «,», пробелы и NBSP — разделители тысяч, удаляются.
+  // «1 234,56» → 1234.56, «1.234,56» → 1234.56, «1.234» → 1234, «1234.5» → 1234.5.
   function parseAmount(value) {
-    const text = normalizeText(value);
-    const match = text.match(/-?\d+(?:[ .]\d{3})*(?:[.,]\d+)?/);
+    const text = String(value ?? '').replace(/[\u00a0\u202f]/g, ' ');
+    const match = text.match(/-?\d[\d\s.,]*/);
     if (!match) return '';
-    return match[0].replace(/\s/g, '').replace(',', '.');
+    const raw = match[0].replace(/[\s.,]+$/, '');
+    const decimal = raw.match(/[.,](\d{1,2})$/);
+    const intPart = (decimal ? raw.slice(0, -decimal[0].length) : raw).replace(/\D/g, '');
+    if (!intPart) return '';
+    return `${raw.startsWith('-') ? '-' : ''}${intPart}${decimal ? `.${decimal[1]}` : ''}`;
   }
 
   // Форма прихода ждёт «YYYY-MM-DD HH:MM:SS» (как в agis-add-income-from-googlesheet).
@@ -185,10 +175,12 @@
   function resolveIncomeTypeOption(options, rawType) {
     const raw = normalizeText(rawType).toLowerCase();
     if (!raw) return '';
-    const target = (INCOME_TYPE_MAP[raw] || rawType).toLowerCase().trim();
+    const target = (INCOME_TYPE_MAP[raw] || raw).toLowerCase();
     const norm = (o) => normalizeText(o.text).toLowerCase();
     const exact = options.find((o) => o.value && norm(o) === target);
     if (exact) return exact.value;
+    // Частичное совпадение — только от 3 символов, иначе «и» выберет случайную опцию.
+    if (target.length < 3) return '';
     const partial = options.find((o) => o.value && norm(o).includes(target));
     return partial ? partial.value : '';
   }
@@ -264,7 +256,7 @@
         const payload = {
           itemId,
           loanId: params['loan-id'].replace(/\s/g, ''),
-          incomeDate: toFormDateTime(params['income-date']),
+          incomeDate: params['income-date'] || '',
           amount: parseAmount(params.amount),
           incomeType: params['income-type'] || '',
           comment: params.comment || '',
@@ -281,11 +273,8 @@
           return;
         }
 
+        // Баннер не показываем: страница сразу уходит на список приходов.
         tr.classList.add(`${DOM_NS}-picked`);
-        showBanner(
-          `Сохранено: займ ${payload.loanId}, ${payload.amount}, ${payload.incomeDate || '-'}, вид «${payload.incomeType || '-'}»`,
-          { type: 'success', durationMs: 2500 },
-        );
 
         const targetUrl = buildIncomeListUrl(payload.loanId);
         log('Переход:', targetUrl);
@@ -341,13 +330,15 @@
   }
 
   function fillForm(data) {
-    const dateOk = setVal(['input[name$="[incomeDate]"]', 'input[id$="_incomeDate"]'], data.incomeDate);
+    // Дата переводится в формат формы в момент вставки — время текущее, а не время клика.
+    const dateOk = setVal(['input[name$="[incomeDate]"]', 'input[id$="_incomeDate"]'], toFormDateTime(data.incomeDate));
     const orderOk = setVal(['input[name$="[bankPaymentId]"]', 'input[id$="_bankPaymentId"]'], data.orderNumber || '-');
     const amountOk = setVal(['input[name$="[income]"]', 'input[id$="_income"]'], data.amount);
-    const typeOk = setIncomeType(data.incomeType);
+    // Вид прихода обязателен, только если он задан в параметрах команды.
+    const typeOk = data.incomeType ? setIncomeType(data.incomeType) : true;
     const commentOk = setVal(['textarea[name$="[comment]"]', 'textarea[id$="_comment"]'], data.comment);
 
-    // Успех — заполнены дата, сумма и вид прихода; иначе payload остаётся в storage.
+    // Успех — заполнены дата, сумма и (если задан) вид прихода; иначе payload остаётся в storage.
     const success = dateOk && amountOk && typeOk;
     const mark = (ok) => (ok ? 'OK' : 'нет');
 
@@ -356,7 +347,7 @@
         success ? 'Поля заполнены — проверьте и нажмите «Предпросмотр».' : 'Заполнено не всё.',
         `Дата: ${mark(dateOk)}`,
         `Сумма: ${mark(amountOk)}`,
-        `Вид прихода: ${mark(typeOk)}`,
+        `Вид прихода: ${data.incomeType ? mark(typeOk) : 'не задан'}`,
         `Номер заказа: ${mark(orderOk)}`,
         `Комментарий: ${mark(commentOk)}`,
       ].join(' '),
@@ -367,8 +358,13 @@
     return success;
   }
 
+  function isExpired(data) {
+    // Payload без savedAt считаем устаревшим.
+    return !Number.isFinite(data.savedAt) || Date.now() - data.savedAt > PAYLOAD_TTL_MS;
+  }
+
   function getLoanIdFromUrl() {
-    const match = location.pathname.match(/\/(?:loan|loan-overdue)\/(\d+)\/income\/(?:list|create)\b/i);
+    const match = location.pathname.match(/\/(?:loan|loan-overdue)\/(\d+)\/income\/create\b/i);
     return match ? match[1] : '';
   }
 
@@ -427,6 +423,15 @@
       return;
     }
 
+    if (isExpired(data)) {
+      await storageDelete(STORAGE_KEY);
+      showBanner('Сохранённый платёж устарел (старше 30 минут) и удалён — кликните строку команды заново.', {
+        type: 'error',
+        durationMs: 6000,
+      });
+      return;
+    }
+
     const urlLoanId = getLoanIdFromUrl();
     if (urlLoanId && data.loanId && urlLoanId !== data.loanId) {
       // Защита от вставки платежа не в тот займ.
@@ -437,17 +442,28 @@
       return;
     }
 
-    addFillButton(data, async () => {
-      const current = await storageGet(STORAGE_KEY, null);
-      if (!current || typeof current !== 'object') {
-        removeFillButton();
-        showBanner('Нет сохранённых данных.', { type: 'error', durationMs: 3000 });
-        return;
-      }
-      if (fillForm(current)) {
-        await storageDelete(STORAGE_KEY);
-        removeFillButton();
-        log('Payload удалён после успешной вставки.');
+    addFillButton(data, async (event) => {
+      const btn = event.currentTarget;
+      // Защита от двойного клика на время чтения storage и заполнения формы.
+      if (btn.disabled) return;
+      btn.disabled = true;
+      try {
+        const current = await storageGet(STORAGE_KEY, null);
+        if (!current || typeof current !== 'object' || isExpired(current)) {
+          if (current) await storageDelete(STORAGE_KEY);
+          removeFillButton();
+          showBanner('Нет актуальных сохранённых данных.', { type: 'error', durationMs: 3000 });
+          return;
+        }
+        if (fillForm(current)) {
+          await storageDelete(STORAGE_KEY);
+          removeFillButton();
+          log('Payload удалён после успешной вставки.');
+        }
+      } catch (error) {
+        warn('Ошибка вставки:', error);
+      } finally {
+        btn.disabled = false;
       }
     });
   }
@@ -472,13 +488,21 @@
       return;
     }
 
+    // income/list не матчится: Sonata не SPA, переход на create — полная загрузка страницы.
     if (/\/admin\/agis2\/core\/(?:loan|loan-overdue)\/\d+\/income\/create/.test(path)) {
       await initCreatePage(token);
-      return;
     }
+  }
 
-    if (/\/admin\/agis2\/core\/(?:loan|loan-overdue)\/\d+\/income\/list/.test(path)) {
-      log('Список приходов — нажмите «Добавить новый», кнопка вставки появится в форме.');
+  // Разовая очистка payload старого формата v1 (incomeDate уже в формате формы).
+  async function dropLegacyPayload() {
+    try {
+      if ((await storageGet(LEGACY_STORAGE_KEY, undefined)) !== undefined) {
+        await storageDelete(LEGACY_STORAGE_KEY);
+        console.log(`[${SCRIPT_NS}] Удалён payload старого формата (${LEGACY_STORAGE_KEY})`);
+      }
+    } catch (error) {
+      warn('Очистка старого payload не удалась:', error);
     }
   }
 
@@ -497,6 +521,7 @@
   );
 
   (async () => {
+    await dropLegacyPayload();
     try {
       debugCtl = await registerDebugToggle(SCRIPT_NS, DEBUG_KEY);
     } catch (err) {
