@@ -156,6 +156,7 @@ module.exports = [
       'scripts/agis-loan-info-navbar.user.js',
       'scripts/agis-protocol-income-fill.user.js',
       'scripts/agis-duplicate-income.user.js',
+      'scripts/agis-task-item-income-fill.user.js',
       'scripts/agis-deposit-refund.user.js',
       'scripts/agis-creditcardoperation-income-fill.user.js',
     ],
