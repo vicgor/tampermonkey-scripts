@@ -2,7 +2,7 @@
 // @name         AGIS - вставка прихода из результатов команды
 // @namespace    agis.task.item.income.fill
 // @version      1.2.0
-// @description  Клик по строке результатов сервисной команды (agis2:income:create) сохраняет платёж; переход на приходы займа; на форме создания кнопка заполняет дату, сумму, вид прихода и комментарий.
+// @description  Клик по строке результатов сервисной команды (agis2:income:create) сохраняет платёж; переход на приходы займа; на форме создания кнопка заполняет дату, сумму, вид прихода и комментарий (тикет из #task=RUSUPPORT-NNNNN в адресе страницы команды).
 // @match        https://agis.volgazaim.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*/income/create*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan-overdue/*/income/create*
@@ -69,7 +69,14 @@
   // до window-guard'а, т.к. в Node window не определён.
   if (typeof process !== 'undefined' && process.versions?.node && typeof module !== 'undefined' && module.exports) {
     normalizeText = require('../lib/agis-core.js').normalizeText;
-    module.exports = { parseParamLines, parseAmount, toFormDateTime, resolveIncomeTypeOption, buildComment };
+    module.exports = {
+      parseParamLines,
+      parseAmount,
+      toFormDateTime,
+      resolveIncomeTypeOption,
+      parseTicketFromHash,
+      buildComment,
+    };
     return;
   }
 
@@ -100,6 +107,9 @@
   const LEGACY_STORAGE_KEY = 'agis:task-item-income:payload:v1';
   // Срок жизни сохранённого платежа — старый payload не должен всплыть через дни.
   const PAYLOAD_TTL_MS = 30 * 60 * 1000;
+  // Тикет запоминается на задачу: фильтр и пагинация Sonata уводят на URL без hash.
+  // GM-хранилище общее для всех доменов скрипта — в ключе домен и id задачи.
+  const TICKET_KEY_PREFIX = 'agis:task-item-income:ticket:v1';
   const DEBUG_KEY = 'agis:task-item-income:debug';
   const WAIT_TIMEOUT = 15000;
   const FORM_WAIT_TIMEOUT = 10000;
@@ -185,13 +195,17 @@
     return partial ? partial.value : '';
   }
 
-  // Комментарий прихода: из параметра comment, иначе — номер задачи из URL страницы команды
-  // (в CSV выписок колонки comment нет, а ручной приход должен ссылаться на задачу).
-  function buildComment(paramComment, pathname) {
-    const comment = normalizeText(paramComment);
-    if (comment) return comment;
-    const taskId = String(pathname ?? '').match(/\/supportprocesstask\/(\d+)\//)?.[1];
-    return taskId ? `Задача поддержки #${taskId}` : '';
+  // Ключ тикета из hash страницы команды: #task=RUSUPPORT-75812 (или просто #task=75812).
+  // Номера тикета в AGIS нет нигде — только в ссылке, которую открывает сотрудник.
+  function parseTicketFromHash(hash) {
+    const task = normalizeText(new URLSearchParams(String(hash ?? '').replace(/^#/, '')).get('task'));
+    const m = task.match(/^(?:RUSUPPORT-)?(\d+)$/i);
+    return m ? `RUSUPPORT-${m[1]}` : '';
+  }
+
+  // Комментарий прихода — ровно ключ тикета; без тикета — comment из параметров команды.
+  function buildComment(ticket, paramComment) {
+    return ticket || normalizeText(paramComment);
   }
 
   // --- Страница результатов команды (supportprocesstaskitem/list) ---
@@ -214,6 +228,23 @@
     return `/admin/agis2/core/loan-overdue/${loanId}/income/list`;
   }
 
+  // Тикет из hash сохраняется для задачи; без hash берётся сохранённый ранее.
+  async function resolveTicket() {
+    const taskId = location.pathname.match(/\/supportprocesstask\/(\d+)\//)?.[1] || '';
+    const key = `${TICKET_KEY_PREFIX}:${location.host}:${taskId}`;
+    const fromHash = parseTicketFromHash(location.hash);
+    try {
+      if (fromHash) {
+        await storageSet(key, fromHash);
+        return fromHash;
+      }
+      return (await storageGet(key, '')) || '';
+    } catch (error) {
+      warn('Хранилище тикета недоступно:', error);
+      return fromHash;
+    }
+  }
+
   async function initTaskItemListPage(token) {
     let table;
     try {
@@ -224,8 +255,17 @@
     }
     if (!routeTokenController.isCurrent(token)) return;
 
+    const ticket = await resolveTicket();
+    if (!routeTokenController.isCurrent(token)) return;
+    showBanner(
+      ticket
+        ? `Комментарий приходов: ${ticket}`
+        : 'Тикет не задан — добавьте к адресу #task=RUSUPPORT-NNNNN, иначе комментарий останется без номера.',
+      { type: ticket ? 'success' : 'error', durationMs: 5000 },
+    );
+
     const colIndex = findParamsColumnIndex(table);
-    log('Индекс колонки «Параметры»:', colIndex);
+    log('Индекс колонки «Параметры»:', colIndex, 'тикет:', ticket);
 
     if (!document.querySelector(`#${DOM_NS}-list-style`)) {
       const style = document.createElement('style');
@@ -268,7 +308,7 @@
           incomeDate: params['income-date'] || '',
           amount: parseAmount(params.amount),
           incomeType: params['income-type'] || '',
-          comment: buildComment(params.comment, location.pathname),
+          comment: buildComment(ticket, params.comment),
           orderNumber: params['order-number'] || params['bank-payment-id'] || '-',
           savedAt: Date.now(),
         };

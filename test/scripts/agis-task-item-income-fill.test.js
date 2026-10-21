@@ -4,6 +4,7 @@ import {
   parseAmount,
   toFormDateTime,
   resolveIncomeTypeOption,
+  parseTicketFromHash,
   buildComment,
 } from '../../scripts/agis-task-item-income-fill.user.js';
 
@@ -105,17 +106,30 @@ describe('resolveIncomeTypeOption', () => {
   });
 });
 
+describe('parseTicketFromHash', () => {
+  it('ключ RUSUPPORT-N из #task=, регистр нормализуется', () => {
+    expect(parseTicketFromHash('#task=RUSUPPORT-75812')).toBe('RUSUPPORT-75812');
+    expect(parseTicketFromHash('#task=rusupport-75812')).toBe('RUSUPPORT-75812');
+    expect(parseTicketFromHash('#foo=1&task=%20RUSUPPORT-75812%20')).toBe('RUSUPPORT-75812');
+  });
+  it('голый номер дополняется префиксом', () => {
+    expect(parseTicketFromHash('#task=75812')).toBe('RUSUPPORT-75812');
+  });
+  it('нет task или чужой формат → пусто', () => {
+    expect(parseTicketFromHash('')).toBe('');
+    expect(parseTicketFromHash(undefined)).toBe('');
+    expect(parseTicketFromHash('#task=RU-22813')).toBe('');
+    expect(parseTicketFromHash('#task=RUSUPPORT-')).toBe('');
+  });
+});
+
 describe('buildComment', () => {
-  const path = '/admin/supportprocess/domain/supportprocesstask/3324/supportprocesstaskitem/list';
-  it('comment из параметров имеет приоритет', () => {
-    expect(buildComment(' Добавление приходов Цессия ', path)).toBe('Добавление приходов Цессия');
+  it('комментарий — ровно ключ тикета, даже если в параметрах есть comment', () => {
+    expect(buildComment('RUSUPPORT-75812', 'Добавление приходов Цессия')).toBe('RUSUPPORT-75812');
+    expect(buildComment('RUSUPPORT-75812', undefined)).toBe('RUSUPPORT-75812');
   });
-  it('без comment — номер задачи из URL', () => {
-    expect(buildComment(undefined, path)).toBe('Задача поддержки #3324');
-    expect(buildComment('  ', `${path}?filter[status][value]=failed`)).toBe('Задача поддержки #3324');
-  });
-  it('нет ни comment, ни задачи в URL → пусто', () => {
-    expect(buildComment('', '/admin/agis2/core/loan/1/income/create')).toBe('');
-    expect(buildComment(undefined, undefined)).toBe('');
+  it('без тикета — comment из параметров или пусто', () => {
+    expect(buildComment('', ' Добавление приходов Цессия ')).toBe('Добавление приходов Цессия');
+    expect(buildComment('', undefined)).toBe('');
   });
 });
