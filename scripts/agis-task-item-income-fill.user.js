@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - вставка прихода из результатов команды
 // @namespace    agis.task.item.income.fill
-// @version      1.1.0
+// @version      1.2.0
 // @description  Клик по строке результатов сервисной команды (agis2:income:create) сохраняет платёж; переход на приходы займа; на форме создания кнопка заполняет дату, сумму, вид прихода и комментарий.
 // @match        https://agis.volgazaim.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*/income/create*
@@ -69,7 +69,7 @@
   // до window-guard'а, т.к. в Node window не определён.
   if (typeof process !== 'undefined' && process.versions?.node && typeof module !== 'undefined' && module.exports) {
     normalizeText = require('../lib/agis-core.js').normalizeText;
-    module.exports = { parseParamLines, parseAmount, toFormDateTime, resolveIncomeTypeOption };
+    module.exports = { parseParamLines, parseAmount, toFormDateTime, resolveIncomeTypeOption, buildComment };
     return;
   }
 
@@ -185,6 +185,15 @@
     return partial ? partial.value : '';
   }
 
+  // Комментарий прихода: из параметра comment, иначе — номер задачи из URL страницы команды
+  // (в CSV выписок колонки comment нет, а ручной приход должен ссылаться на задачу).
+  function buildComment(paramComment, pathname) {
+    const comment = normalizeText(paramComment);
+    if (comment) return comment;
+    const taskId = String(pathname ?? '').match(/\/supportprocesstask\/(\d+)\//)?.[1];
+    return taskId ? `Задача поддержки #${taskId}` : '';
+  }
+
   // --- Страница результатов команды (supportprocesstaskitem/list) ---
 
   function findParamsColumnIndex(table) {
@@ -259,7 +268,7 @@
           incomeDate: params['income-date'] || '',
           amount: parseAmount(params.amount),
           incomeType: params['income-type'] || '',
-          comment: params.comment || '',
+          comment: buildComment(params.comment, location.pathname),
           orderNumber: params['order-number'] || params['bank-payment-id'] || '-',
           savedAt: Date.now(),
         };

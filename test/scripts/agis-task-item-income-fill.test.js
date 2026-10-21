@@ -4,6 +4,7 @@ import {
   parseAmount,
   toFormDateTime,
   resolveIncomeTypeOption,
+  buildComment,
 } from '../../scripts/agis-task-item-income-fill.user.js';
 
 describe('parseParamLines', () => {
@@ -101,5 +102,20 @@ describe('resolveIncomeTypeOption', () => {
   it('нет совпадения → пусто', () => {
     expect(resolveIncomeTypeOption(options, 'неизвестно')).toBe('');
     expect(resolveIncomeTypeOption(options, '')).toBe('');
+  });
+});
+
+describe('buildComment', () => {
+  const path = '/admin/supportprocess/domain/supportprocesstask/3324/supportprocesstaskitem/list';
+  it('comment из параметров имеет приоритет', () => {
+    expect(buildComment(' Добавление приходов Цессия ', path)).toBe('Добавление приходов Цессия');
+  });
+  it('без comment — номер задачи из URL', () => {
+    expect(buildComment(undefined, path)).toBe('Задача поддержки #3324');
+    expect(buildComment('  ', `${path}?filter[status][value]=failed`)).toBe('Задача поддержки #3324');
+  });
+  it('нет ни comment, ни задачи в URL → пусто', () => {
+    expect(buildComment('', '/admin/agis2/core/loan/1/income/create')).toBe('');
+    expect(buildComment(undefined, undefined)).toBe('');
   });
 });
