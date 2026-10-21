@@ -110,6 +110,8 @@
   // Тикет запоминается на задачу: фильтр и пагинация Sonata уводят на URL без hash.
   // GM-хранилище общее для всех доменов скрипта — в ключе домен и id задачи.
   const TICKET_KEY_PREFIX = 'agis:task-item-income:ticket:v1';
+  // Тикет текущей страницы команды; обновляется при каждой инициализации (в т.ч. смене hash).
+  let currentTicket = '';
   const DEBUG_KEY = 'agis:task-item-income:debug';
   const WAIT_TIMEOUT = 15000;
   const FORM_WAIT_TIMEOUT = 10000;
@@ -197,9 +199,12 @@
 
   // Ключ тикета из hash страницы команды: #task=RUSUPPORT-75812 (или просто #task=75812).
   // Номера тикета в AGIS нет нигде — только в ссылке, которую открывает сотрудник.
+  // null — параметра task нет (можно взять сохранённый), '' — task есть, но некорректен
+  // (опечатку нельзя молча подменять сохранённым номером).
   function parseTicketFromHash(hash) {
-    const task = normalizeText(new URLSearchParams(String(hash ?? '').replace(/^#/, '')).get('task'));
-    const m = task.match(/^(?:RUSUPPORT-)?(\d+)$/i);
+    const raw = new URLSearchParams(String(hash ?? '').replace(/^#/, '')).get('task');
+    if (raw === null) return null;
+    const m = normalizeText(raw).match(/^(?:RUSUPPORT-)?(\d+)$/i);
     return m ? `RUSUPPORT-${m[1]}` : '';
   }
 
@@ -228,20 +233,22 @@
     return `/admin/agis2/core/loan-overdue/${loanId}/income/list`;
   }
 
-  // Тикет из hash сохраняется для задачи; без hash берётся сохранённый ранее.
+  // Тикет из hash сохраняется для задачи; без параметра task берётся сохранённый ранее.
+  // → { ticket, invalid }: invalid — task в hash есть, но не похож на ключ тикета.
   async function resolveTicket() {
     const taskId = location.pathname.match(/\/supportprocesstask\/(\d+)\//)?.[1] || '';
     const key = `${TICKET_KEY_PREFIX}:${location.host}:${taskId}`;
     const fromHash = parseTicketFromHash(location.hash);
+    if (fromHash === '') return { ticket: '', invalid: true };
     try {
       if (fromHash) {
         await storageSet(key, fromHash);
-        return fromHash;
+        return { ticket: fromHash, invalid: false };
       }
-      return (await storageGet(key, '')) || '';
+      return { ticket: (await storageGet(key, '')) || '', invalid: false };
     } catch (error) {
       warn('Хранилище тикета недоступно:', error);
-      return fromHash;
+      return { ticket: fromHash || '', invalid: false };
     }
   }
 
@@ -255,17 +262,20 @@
     }
     if (!routeTokenController.isCurrent(token)) return;
 
-    const ticket = await resolveTicket();
+    const { ticket, invalid } = await resolveTicket();
     if (!routeTokenController.isCurrent(token)) return;
-    showBanner(
-      ticket
-        ? `Комментарий приходов: ${ticket}`
-        : 'Тикет не задан — добавьте к адресу #task=RUSUPPORT-NNNNN, иначе комментарий останется без номера.',
-      { type: ticket ? 'success' : 'error', durationMs: 5000 },
-    );
+    // Обработчики строк привязываются один раз и читают тикет в момент клика —
+    // смена hash без перезагрузки должна попасть в уже привязанные строки.
+    currentTicket = ticket;
+    let message = `Комментарий приходов: ${ticket}`;
+    if (invalid)
+      message = 'Некорректный #task= в адресе — нужен #task=RUSUPPORT-NNNNN. Номер в комментарий не попадёт.';
+    else if (!ticket)
+      message = 'Тикет не задан — добавьте к адресу #task=RUSUPPORT-NNNNN, иначе комментарий останется без номера.';
+    showBanner(message, { type: ticket ? 'success' : 'error', durationMs: 5000 });
 
     const colIndex = findParamsColumnIndex(table);
-    log('Индекс колонки «Параметры»:', colIndex, 'тикет:', ticket);
+    log('Индекс колонки «Параметры»:', colIndex, 'тикет:', ticket, 'некорректный task:', invalid);
 
     if (!document.querySelector(`#${DOM_NS}-list-style`)) {
       const style = document.createElement('style');
@@ -308,7 +318,7 @@
           incomeDate: params['income-date'] || '',
           amount: parseAmount(params.amount),
           incomeType: params['income-type'] || '',
-          comment: buildComment(ticket, params.comment),
+          comment: buildComment(currentTicket, params.comment),
           orderNumber: params['order-number'] || params['bank-payment-id'] || '-',
           savedAt: Date.now(),
         };

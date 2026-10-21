@@ -115,9 +115,14 @@ describe('parseTicketFromHash', () => {
   it('голый номер дополняется префиксом', () => {
     expect(parseTicketFromHash('#task=75812')).toBe('RUSUPPORT-75812');
   });
-  it('нет task или чужой формат → пусто', () => {
-    expect(parseTicketFromHash('')).toBe('');
-    expect(parseTicketFromHash(undefined)).toBe('');
+  it('нет параметра task → null (можно взять сохранённый тикет)', () => {
+    expect(parseTicketFromHash('')).toBeNull();
+    expect(parseTicketFromHash(undefined)).toBeNull();
+    expect(parseTicketFromHash('#foo=1')).toBeNull();
+  });
+  it('task есть, но некорректен → пустая строка (не подменять сохранённым)', () => {
+    expect(parseTicketFromHash('#task=')).toBe('');
+    expect(parseTicketFromHash('#task=RUSUPORT-75813')).toBe('');
     expect(parseTicketFromHash('#task=RU-22813')).toBe('');
     expect(parseTicketFromHash('#task=RUSUPPORT-')).toBe('');
   });
