@@ -17,6 +17,7 @@ import {
   fillCloseFields,
   isForceCloseSubmission,
   detectCloseResult,
+  watchSubmit,
 } from '../../scripts/agis-loan-force-close.user.js';
 
 // 09:34:56 UTC = 12:34:56 по Москве (UTC+3) — тесты не зависят от пояса машины.
@@ -210,11 +211,14 @@ describe('очередь и прогресс', () => {
     expect(pickNext(items, done, '3').loanId).toBe('2');
     expect(pickNext(items, { 1: done[1], 2: { at: 1, comment: 'c' }, 3: { at: 1, comment: 'c' } }, '1')).toBeNull();
   });
-  it('isPendingUsable: только отправленная форма своего займа и не старше TTL', () => {
-    const sent = { stage: 'submitted', loanId: '1', submittedAt: 1000 };
+  it('isPendingUsable: заполненная/отправленная форма своего займа и не старше TTL', () => {
+    const sent = { stage: 'submitted', loanId: '1', at: 1000 };
     expect(isPendingUsable(sent, '1', 2000)).toBe(true);
+    expect(isPendingUsable({ ...sent, stage: 'armed' }, '1', 2000)).toBe(true);
     expect(isPendingUsable({ ...sent, loanId: '2' }, '1', 2000)).toBe(false);
     expect(isPendingUsable({ ...sent, stage: 'filled' }, '1', 2000)).toBe(false);
+    // Формат v1.0.0 (submittedAt) — не применяем.
+    expect(isPendingUsable({ stage: 'submitted', loanId: '1', submittedAt: 1000 }, '1', 2000)).toBe(false);
     expect(isPendingUsable(sent, '1', 1000 + 11 * 60 * 1000)).toBe(false);
     expect(isPendingUsable(null, '1')).toBe(false);
   });
@@ -335,20 +339,107 @@ describe('форма закрытия (jsdom)', () => {
     expect(isForceCloseSubmission(doc, 'forgiveness')).toBe(false);
   });
 
+  // Разметка Sonata FlashMessage/render.html.twig.
+  const flash = (type) =>
+    `<div class="alert alert-${type} alert-dismissable">` +
+    '<button type="button" class="close" data-dismiss="alert">×</button>msg</div>';
+  const closedSelect =
+    '<form><select class="transition_select"><option value="">—</option><option value="52">Каникулы</option></select></form>';
+  // Постоянный виджет карточки (просрочка/долг) — не flash.
+  const widget = '<div class="alert alert-danger">Просрочка 120 дней</div>';
+
   it('detectCloseResult: закрыто только при зелёной плашке и исчезнувшем переходе', () => {
     document.body.innerHTML = '';
     expect(detectCloseResult(document)).toBeNull();
 
-    document.body.innerHTML = '<div class="alert alert-danger">err</div>';
+    document.body.innerHTML = flash('danger');
     expect(detectCloseResult(document)).toBe('error');
 
     // Сохранили карточку другим действием — плашка есть, но закрытие по-прежнему доступно.
-    document.body.innerHTML = `<div class="alert alert-success">ok</div>${formHtml}`;
+    document.body.innerHTML = `${flash('success')}${formHtml}`;
     expect(detectCloseResult(document)).toBe('unconfirmed');
 
-    document.body.innerHTML =
-      '<div class="alert alert-success">ok</div>' +
-      '<select class="transition_select"><option value="">—</option><option value="52">Каникулы</option></select>';
+    document.body.innerHTML = `${flash('success')}${closedSelect}`;
     expect(detectCloseResult(document)).toBe('closed');
+  });
+
+  it('detectCloseResult: постоянный красный виджет карточки — не ошибка', () => {
+    document.body.innerHTML = `${widget}${closedSelect}`;
+    expect(detectCloseResult(document)).toBeNull();
+
+    document.body.innerHTML = `${widget}${flash('success')}${closedSelect}`;
+    expect(detectCloseResult(document)).toBe('closed');
+
+    // Зелёный виджет без крестика — тоже не результат сохранения.
+    document.body.innerHTML = `<div class="alert alert-success">Оплачено</div>${closedSelect}`;
+    expect(detectCloseResult(document)).toBeNull();
+  });
+
+  it('detectCloseResult: flash без класса alert-dismissable, но с крестиком (Bootstrap 5)', () => {
+    document.body.innerHTML =
+      '<div class="alert alert-success"><button data-bs-dismiss="alert">×</button>ok</div>' + closedSelect;
+    expect(detectCloseResult(document)).toBe('closed');
+  });
+
+  it('detectCloseResult: ошибки полей — только внутри формы перехода', () => {
+    document.body.innerHTML = `${flash('success')}${formHtml}`;
+    document.querySelector('form').insertAdjacentHTML('beforeend', '<div class="has-error"></div>');
+    expect(detectCloseResult(document)).toBe('error');
+
+    document.body.innerHTML = `<div class="has-error"></div>${flash('success')}${closedSelect}`;
+    expect(detectCloseResult(document)).toBe('closed');
+  });
+
+  describe('watchSubmit', () => {
+    const arm = (options = {}) => {
+      const doc = setup();
+      selectTransition(doc);
+      fillCloseFields(doc, { reason: 'forgiveness', closeDateTime: '2026-10-13 12:34:56', comment: 'c' });
+      const form = doc.querySelector('form');
+      const calls = [];
+      watchSubmit(form, 'forgiveness', {
+        onOurs: () => calls.push('ours'),
+        onOther: () => calls.push('other'),
+        ...options,
+      });
+      const submit = () => form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      return { doc, form, calls, submit };
+    };
+
+    it('отменённая страницей первая отправка не снимает слушатель', () => {
+      const { form, calls, submit } = arm();
+      let firstAttempt = true;
+      // Валидация страницы (bubbling) отменяет первую отправку — уже после нашего capture-слушателя.
+      form.addEventListener('submit', (event) => {
+        if (firstAttempt) event.preventDefault();
+        firstAttempt = false;
+      });
+      expect(submit()).toBe(false);
+      expect(submit()).toBe(true);
+      expect(calls).toEqual(['ours', 'ours']);
+    });
+
+    it('срабатывает раньше обработчиков страницы и не отменяет отправку', () => {
+      const { form, calls, submit } = arm();
+      const order = [];
+      form.addEventListener('submit', () => order.push([...calls]));
+      expect(submit()).toBe(true);
+      expect(order).toEqual([['ours']]);
+    });
+
+    it('оператор сменил причину — onOther', () => {
+      const { doc, calls, submit } = arm();
+      doc.querySelector('.force_close_reason').value = 'fraud_loan_taken_other_person';
+      submit();
+      expect(calls).toEqual(['other']);
+    });
+
+    it('после abort сигнала маршрута не срабатывает', () => {
+      const controller = new AbortController();
+      const { calls, submit } = arm({ signal: controller.signal });
+      controller.abort();
+      submit();
+      expect(calls).toEqual([]);
+    });
   });
 });
