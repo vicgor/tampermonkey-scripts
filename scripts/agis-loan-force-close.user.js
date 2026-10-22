@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - закрытие займов из Google Таблицы
 // @namespace    agis.loan.force-close
-// @version      1.0.0
+// @version      1.0.1
 // @description  Список займов из Google Таблицы (CSV Publish) → на карточке займа панель с кнопкой «Заполнить закрытие»: выбирает переход «Принудительное закрытие», подставляет причину, дату и комментарий из таблицы и снимает СМС клиенту. Отправка формы — только вручную.
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan*/*/edit
 // @match        https://agis.belkacredit.ru/admin/agis2/core/loan*/*/edit
@@ -46,9 +46,14 @@
   // (иначе при раннем return в Node-ветке вызов упал бы в TDZ).
   const FORCE_CLOSE_TRANSITION_VALUE = '26'; // LoanTransitionType::TRANSITION_FORCE_CLOSE
   const FORCE_CLOSE_TEXT_PATTERN = /принудительн\S*\s+закрыт/iu;
-  // «Форма отправлена, ждём перезагрузки с результатом»: перезагрузка идёт сразу после submit,
-  // запись старше 10 минут — хвост от ушедшей не туда отправки, её не применяем.
+  // «Форма заполнена/отправлена, ждём перезагрузки с результатом»: оператор отправляет форму вскоре
+  // после заполнения, запись старше 10 минут — хвост от брошенного заполнения, её не применяем.
   const PENDING_TTL = 10 * 60 * 1000;
+  const PENDING_STAGES = ['armed', 'submitted'];
+  // Flash-плашка Sonata (FlashMessage/render.html.twig) — закрываемый .alert с крестиком. Постоянные
+  // .alert-* виджеты карточки (просрочка, долг) не закрываются — результатом сохранения не считаем.
+  const FLASH_SELECTOR = '.alert.alert-dismissable, .alert.alert-dismissible';
+  const FLASH_CLOSE_SELECTOR = '[data-dismiss="alert"], [data-bs-dismiss="alert"]';
   const QUEUE_TTL = 10 * 60 * 1000; // кэш списка из таблицы
   // Часовой пояс сервера AGIS: сервер проверяет, что момент закрытия не в будущем, по своему времени,
   // а оператор может сидеть в другом поясе. Допущение — все бренды на московском времени.
@@ -83,6 +88,7 @@
       selectTransition,
       fillCloseFields,
       isForceCloseSubmission,
+      watchSubmit,
       detectCloseResult,
     };
     return;
@@ -350,12 +356,13 @@
     return pending.find((item) => items.indexOf(item) > currentIndex) || pending[0];
   }
 
-  // Запись пишется только на submit формы с нашим переходом (см. watchSubmit) — «просто заполнили»
-  // сюда не попадает, поэтому чужое сохранение карточки займа выполненным его не сделает.
+  // 'armed' пишется после успешного заполнения формы, 'submitted' — на submit с нашим переходом и
+  // причиной (см. watchSubmit). Сама запись займ выполненным не делает: отметка ставится только при
+  // подтверждённом закрытии (detectCloseResult === 'closed'), так что чужое сохранение карточки не в счёт.
   function isPendingUsable(payload, loanId, now = Date.now()) {
-    if (!payload || payload.stage !== 'submitted' || payload.loanId !== loanId) return false;
-    if (!Number.isFinite(payload.submittedAt)) return false;
-    return now - payload.submittedAt <= PENDING_TTL;
+    if (!payload || !PENDING_STAGES.includes(payload.stage) || payload.loanId !== loanId) return false;
+    if (!Number.isFinite(payload.at)) return false;
+    return now - payload.at <= PENDING_TTL;
   }
 
   // Неопубликованная таблица / нет доступа: Google отвечает 200 и HTML-страницей входа вместо CSV.
@@ -489,12 +496,37 @@
     return Boolean(transition) && select.value === transition.value && reasonSelect.value === reasonValue;
   }
 
-  // Результат после перезагрузки карточки: 'error' — ошибки формы/красная плашка; 'closed' — зелёная
-  // плашка И перехода «Принудительное закрытие» больше нет (статус займа сменился); 'unconfirmed' —
-  // зелёная плашка, но переход всё ещё предлагается; null — плашек ещё нет.
+  // Слежение за отправкой формы. Capture: срабатывает до обработчиков страницы. Без once: валидация
+  // страницы может отменить первую отправку (preventDefault уже после нас) — повторная тоже должна
+  // сюда дойти; onOurs/onOther идемпотентны.
+  function watchSubmit(form, reasonValue, { onOurs, onOther, signal }) {
+    form.addEventListener(
+      'submit',
+      () => {
+        if (isForceCloseSubmission(form.ownerDocument, reasonValue)) onOurs();
+        else onOther();
+      },
+      { capture: true, signal },
+    );
+  }
+
+  function flashAlerts(doc) {
+    return Array.from(doc.querySelectorAll('.alert')).filter(
+      (alert) => alert.matches(FLASH_SELECTOR) || alert.querySelector(FLASH_CLOSE_SELECTOR) !== null,
+    );
+  }
+
+  // Результат после перезагрузки карточки: 'error' — ошибки полей формы/красная flash-плашка;
+  // 'closed' — зелёная flash-плашка И перехода «Принудительное закрытие» больше нет (статус займа
+  // сменился); 'unconfirmed' — зелёная плашка, но переход всё ещё предлагается; null — плашек нет.
+  // Ищем только flash-плашки и ошибки внутри формы: постоянный красный виджет карточки иначе давал бы
+  // 'error' всегда.
   function detectCloseResult(doc) {
-    if (doc.querySelector('.alert-danger, .alert-error, .has-error, .sonata-ba-field-error')) return 'error';
-    if (!doc.querySelector('.alert-success, .sonata-flash-success')) return null;
+    const flashes = flashAlerts(doc);
+    const form = doc.querySelector('select.transition_select')?.closest('form') || doc;
+    if (flashes.some((alert) => alert.matches('.alert-danger, .alert-error'))) return 'error';
+    if (form.querySelector('.has-error, .sonata-ba-field-error')) return 'error';
+    if (!flashes.some((alert) => alert.matches('.alert-success'))) return null;
     const select = doc.querySelector('select.transition_select');
     const stillOffered = select ? findForceCloseTransition(readOptions(select)) !== null : false;
     return stillOffered ? 'unconfirmed' : 'closed';
@@ -671,27 +703,23 @@
     return true;
   }
 
-  // Отправку формы фиксируем на submit (capture), а не по зелёной плашке потом: плашку даёт любое
-  // сохранение карточки. Запись — только если уходит именно наш переход с нашей причиной.
-  // Без await: обработчик submit не может задержать отправку, а в @sandbox DOM GM_setValue
-  // фактически синхронный — запись успевает до ухода со страницы (как в agis-bki-ban-note).
-  function watchSubmit(form, route, item, reasonValue) {
-    form.addEventListener(
-      'submit',
-      () => {
-        if (!isForceCloseSubmission(document, reasonValue)) {
-          log('Форма отправлена без принудительного закрытия или с другой причиной — займ не отмечаю');
-          return;
-        }
-        storageSet(pendingKey(route.loanId), {
-          stage: 'submitted',
-          loanId: route.loanId,
-          comment: item.comment,
-          submittedAt: Date.now(),
-        });
+  // Pending пишется с await сразу после заполнения ('armed'), а не только на submit: обработчик
+  // submit не может дождаться GM_setValue, и запись могла бы потеряться при уходе со страницы.
+  // На submit — лишь уточнение без await ('submitted' или удаление, если оператор сменил переход/
+  // причину); если оно потеряется, 'armed' всё равно проверится после перезагрузки.
+  async function armPending(form, route, item, reasonValue) {
+    const key = pendingKey(route.loanId);
+    const armed = { stage: 'armed', loanId: route.loanId, comment: item.comment, at: Date.now() };
+    await storageSet(key, armed);
+    if (!form) return;
+    watchSubmit(form, reasonValue, {
+      onOurs: () => storageSet(key, { ...armed, stage: 'submitted', at: Date.now() }),
+      onOther: () => {
+        log('Форма отправлена без принудительного закрытия или с другой причиной — займ не отмечаю');
+        storageDelete(key);
       },
-      { capture: true, once: true, signal: routeAbort.signal },
-    );
+      signal: routeAbort.signal,
+    });
   }
 
   // Заполнение формы: шаг 1 — переход, затем ждём, пока скрипт страницы покажет поля закрытия
@@ -737,7 +765,8 @@
     }
 
     if (problems.length > 0) {
-      showBanner(`Заполнено частично, НЕ отправляйте форму:\n${problems.join('\n')}`, {
+      // showBanner ядра — textContent без pre-line: переводы строк схлопнулись бы.
+      showBanner(`Заполнено частично, НЕ отправляйте форму: ${problems.join('; ')}`, {
         type: 'error',
         durationMs: 15000,
       });
@@ -747,8 +776,9 @@
 
     const form = transition.field.closest('form');
     const reasonValue = document.querySelector('select.force_close_reason').value;
-    if (form) watchSubmit(form, route, item, reasonValue);
-    else warn('Форма перехода не найдена — после отправки займ придётся отметить выполненным вручную');
+    if (!form) warn('Форма перехода не найдена — смену причины перед отправкой отследить не получится');
+    await armPending(form, route, item, reasonValue);
+    if (!routeTokenController.isCurrent(token)) return;
 
     showBanner(
       `Форма закрытия займа #${route.loanId} заполнена (${closeDateTime}, «${item.comment}», СМС снято). ` +
@@ -758,12 +788,10 @@
     log('Форма заполнена:', route.loanId, closeDateTime, item);
   }
 
-  // После ручной отправки AGIS перезагружает карточку займа. Если перед этим ушла наша форма
-  // (pending 'submitted'), дожидаемся загрузки и плашки результата и отмечаем займ выполненным,
+  // После ручной отправки AGIS перезагружает карточку займа. Если перед этим наша форма была заполнена
+  // (pending 'armed'/'submitted'), дожидаемся загрузки и плашки результата и отмечаем займ выполненным,
   // только если закрытие подтверждено сменой статуса (detectCloseResult === 'closed').
-  async function resolvePending(route, token) {
-    const pending = await storageGet(pendingKey(route.loanId), null);
-    if (!routeTokenController.isCurrent(token) || !pending) return;
+  async function resolvePending(route, token, pending) {
     // Запись одноразовая: удаляем сразу, F5 по той же странице не должен проверять её повторно.
     await storageDelete(pendingKey(route.loanId));
     if (!routeTokenController.isCurrent(token) || !isPendingUsable(pending, route.loanId)) return;
@@ -773,6 +801,11 @@
     const result = await waitOrLastCheck(() => detectCloseResult(document), 10000, 'плашка результата закрытия');
     if (!routeTokenController.isCurrent(token)) return;
 
+    // Заполнили, но не отправили (F5/переход по ссылке): плашки нет — молча забываем заполнение.
+    if (result === null && pending.stage === 'armed') {
+      log('Форма была заполнена, но не отправлена — отметку не ставлю');
+      return;
+    }
     if (result === 'closed') {
       await markDone(route.loanId, pending.comment);
       if (!routeTokenController.isCurrent(token)) return;
@@ -896,9 +929,9 @@
     // панель с новым прогрессом.
     await renderPanel(route, queue, token);
     if (!routeTokenController.isCurrent(token)) return;
-    const hadPending = await storageGet(pendingKey(route.loanId), null);
-    if (!hadPending || !routeTokenController.isCurrent(token)) return;
-    await resolvePending(route, token);
+    const pending = await storageGet(pendingKey(route.loanId), null);
+    if (!pending || !routeTokenController.isCurrent(token)) return;
+    await resolvePending(route, token, pending);
     if (!routeTokenController.isCurrent(token)) return;
     await renderPanel(route, queue, token);
   }
