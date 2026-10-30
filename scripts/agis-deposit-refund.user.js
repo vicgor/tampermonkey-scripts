@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - возврат депозита
 // @namespace    agis.deposit.refund
-// @version      2.2.0
+// @version      2.2.1
 // @description  Находит «ДС на счету» (или «Депозит» в блоке «Сумма») на странице займа → кнопка «Вернуть депозит» → открывает форму транзакции и автозаполняет сумму, направление OUT и тип «Возврат депозита». Отправка формы — только вручную.
 // @match        https://agis.credit7.ru/admin/agis2/core/loan/*
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*
@@ -485,11 +485,20 @@
     bootstrap().catch((error) => warn('Ошибка SPA-переинициализации:', error));
   }, 150);
 
-  window.addEventListener('pagehide', () => cleanup(), { once: true });
+  // onUrlChange — синхронно, до любых await: стоп-функция нужна pagehide-обработчику.
+  const stopUrlWatcher = onUrlChange(() => rebootstrap());
+
+  window.addEventListener(
+    'pagehide',
+    () => {
+      cleanup();
+      stopUrlWatcher();
+    },
+    { once: true },
+  );
 
   (async () => {
     debugCtl = await registerDebugToggle(SCRIPT_NS, DEBUG_KEY);
-    onUrlChange(() => rebootstrap());
     await bootstrap();
   })().catch((error) => warn('Ошибка запуска:', error));
 })();

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - очистка вставки в поля суммы
 // @namespace    agis.paste.cleaner
-// @version      1.11
+// @version      1.11.1
 // @description  Очищает вставку в полях суммы: оставляет только цифры, точки и запятые; первый и последний символ — цифры.
 // @match        https://agis.credit7.ru/*/loan*/*/create
 // @match        https://agis.creditsmile.ru/*/loan*/*/create
@@ -155,10 +155,13 @@
 
   const rebootstrap = debounce(bootstrap, 150);
 
+  const stopUrlWatcher = onUrlChange(() => rebootstrap());
+
   window.addEventListener(
     'pagehide',
     () => {
       cleanup();
+      stopUrlWatcher();
       if (domObserverStop) {
         domObserverStop();
         domObserverStop = null;
@@ -167,6 +170,5 @@
     { once: true },
   );
 
-  onUrlChange(() => rebootstrap());
   bootstrap();
 })();
