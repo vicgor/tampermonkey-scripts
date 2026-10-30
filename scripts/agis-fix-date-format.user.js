@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - исправление формата даты
 // @namespace    agis.fix.date.format
-// @version      1.2
+// @version      1.2.1
 // @description  Исправляет ввод даты в полях типа date/datetime-local: при вводе через клавиатуру или вставку преобразует форматы ДД.ММ.ГГГГ и ГГГГ-ММ-ДД в значение, принимаемое браузером (ГГГГ-ММ-ДД для date, ГГГГ-ММ-ДДTHH:MM для datetime-local).
 // @match        https://agis.credit7.ru/*/loan*/*/create
 // @match        https://agis.creditsmile.ru/*/loan*/*/create
@@ -203,10 +203,13 @@
 
   const rebootstrap = debounce(bootstrap, 150);
 
+  const stopUrlWatcher = onUrlChange(() => rebootstrap());
+
   window.addEventListener(
     'pagehide',
     () => {
       cleanup();
+      stopUrlWatcher();
       if (domObserverStop) {
         domObserverStop();
         domObserverStop = null;
@@ -215,6 +218,5 @@
     { once: true },
   );
 
-  onUrlChange(() => rebootstrap());
   bootstrap();
 })();
