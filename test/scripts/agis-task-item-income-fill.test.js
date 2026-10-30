@@ -4,6 +4,8 @@ import {
   parseAmount,
   toFormDateTime,
   resolveIncomeTypeOption,
+  parseTicketFromHash,
+  buildComment,
 } from '../../scripts/agis-task-item-income-fill.user.js';
 
 describe('parseParamLines', () => {
@@ -101,5 +103,38 @@ describe('resolveIncomeTypeOption', () => {
   it('нет совпадения → пусто', () => {
     expect(resolveIncomeTypeOption(options, 'неизвестно')).toBe('');
     expect(resolveIncomeTypeOption(options, '')).toBe('');
+  });
+});
+
+describe('parseTicketFromHash', () => {
+  it('ключ RUSUPPORT-N из #task=, регистр нормализуется', () => {
+    expect(parseTicketFromHash('#task=RUSUPPORT-75812')).toBe('RUSUPPORT-75812');
+    expect(parseTicketFromHash('#task=rusupport-75812')).toBe('RUSUPPORT-75812');
+    expect(parseTicketFromHash('#foo=1&task=%20RUSUPPORT-75812%20')).toBe('RUSUPPORT-75812');
+  });
+  it('голый номер дополняется префиксом', () => {
+    expect(parseTicketFromHash('#task=75812')).toBe('RUSUPPORT-75812');
+  });
+  it('нет параметра task → null (можно взять сохранённый тикет)', () => {
+    expect(parseTicketFromHash('')).toBeNull();
+    expect(parseTicketFromHash(undefined)).toBeNull();
+    expect(parseTicketFromHash('#foo=1')).toBeNull();
+  });
+  it('task есть, но некорректен → пустая строка (не подменять сохранённым)', () => {
+    expect(parseTicketFromHash('#task=')).toBe('');
+    expect(parseTicketFromHash('#task=RUSUPORT-75813')).toBe('');
+    expect(parseTicketFromHash('#task=RU-22813')).toBe('');
+    expect(parseTicketFromHash('#task=RUSUPPORT-')).toBe('');
+  });
+});
+
+describe('buildComment', () => {
+  it('комментарий — ровно ключ тикета, даже если в параметрах есть comment', () => {
+    expect(buildComment('RUSUPPORT-75812', 'Добавление приходов Цессия')).toBe('RUSUPPORT-75812');
+    expect(buildComment('RUSUPPORT-75812', undefined)).toBe('RUSUPPORT-75812');
+  });
+  it('без тикета — comment из параметров или пусто', () => {
+    expect(buildComment('', ' Добавление приходов Цессия ')).toBe('Добавление приходов Цессия');
+    expect(buildComment('', undefined)).toBe('');
   });
 });
