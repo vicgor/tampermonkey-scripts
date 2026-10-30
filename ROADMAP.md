@@ -146,7 +146,7 @@ googlesheet — заполнение формы не работало из-за 
 
 - [x] **`ci.yml`** — на каждый PR и push в `main`: `npm ci` + `npm run lint` +
   `npm run format:check` (ESLint уже валидирует метаблок через
-  `eslint-plugin-userscripts`, отдельный шаг не нужен). Node 20, с кэшем npm.
+  `eslint-plugin-userscripts`, отдельный шаг не нужен). Node 22 (Node 20 — EOL с апреля 2026), с кэшем npm.
   Бейдж статуса в README.md.
 - [x] **Проверка бампа `@version` на PR.** `scripts/check-version-bump.js`
   (`npm run check-version-bump`, шаг в `ci.yml`) — если `scripts/*.user.js`
