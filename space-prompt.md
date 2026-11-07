@@ -36,7 +36,8 @@
   (актуальный тег и хеш смотри в `git tag -l` и `@require`-строке любого файла в `scripts/`).
   Ядро (`window.__AGIS_CORE__` после `@require`) даёт: `waitForElement`/`waitForCondition`/`observeAddedElements`
   (MutationObserver; `waitForCondition` — когда нужное не выражается CSS-селектором, например
-  поиск поля по тексту подписи); `storageGet`/`storageSet`/`storageSetDebounced`/`storageDelete`;
+  поиск поля по тексту подписи); `storageGet`/`storageSet`/`storageSetDebounced`/`storageDelete`/`storageList`/`storagePrune`
+  (`storagePrune` — уборка просроченных ключей «на объект», например `…:payload:v1:<loanId>`);
   `httpRequest`/`api.getJson`/`api.postJson`/`api.getHtml` поверх `GM_xmlhttpRequest`;
   `onUrlChange` для SPA; `createRouteTokenController`; `showBanner`; `registerDebugToggle`;
   `cleanupRoute`/`cleanup`.

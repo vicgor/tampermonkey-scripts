@@ -331,8 +331,8 @@ const { waitForElement, onUrlChange, api, showBanner } = window.__AGIS_CORE__;
 
 | Функция | Назначение | Требует `@grant` |
 |---|---|---|
-| `waitForElement(selector, opts)` | Ждёт появления элемента через MutationObserver с таймаутом | — |
-| `waitForCondition(probe, opts)` | То же, но ждёт произвольного условия: `probe()` вызывается при каждой мутации, промис резолвится его первым truthy-значением. Для случаев, где нужного элемента не выразить одним CSS-селектором (поиск поля по тексту подписи и т.п.). `opts`: `root`, `timeout`, `describe` (текст для лога при таймауте). Ядро v1.4.0+ | — |
+| `waitForElement(selector, opts)` | Ждёт появления элемента через MutationObserver с таймаутом. `opts`: `root`, `timeout`; с v1.5.0 — `attributes`/`attributeFilter`, как у `waitForCondition` (для селекторов вроде `.alert:not(.hidden)` на уже существующем узле) | — |
+| `waitForCondition(probe, opts)` | То же, но ждёт произвольного условия: `probe()` вызывается при каждой мутации, промис резолвится его первым truthy-значением. Для случаев, где нужного элемента не выразить одним CSS-селектором (поиск поля по тексту подписи и т.п.). `opts`: `root`, `timeout`, `describe` (текст для лога при таймауте). Сама функция — ядро v1.4.0+; опции `attributes`/`attributeFilter` — **v1.5.0+**: ловить условия, меняющиеся только атрибутом (поле показывают через `style`, плашку — через `class`). По умолчанию выключены; передавай узкий `attributeFilter` (`['style', 'class']`) — он сам включает `attributes`, пустой массив игнорируется | — |
 | `observeAddedElements(selector, cb, opts)` | Вызывает callback для каждого нового подходящего элемента | — |
 | `debounce(fn, wait)` | Стандартный debounce с `.cancel()` | — |
 | `cleanupRoute()` | Очищает observer'ы/таймеры `waitForElement` текущего маршрута | — |
@@ -344,6 +344,8 @@ const { waitForElement, onUrlChange, api, showBanner } = window.__AGIS_CORE__;
 | `storageSet(key, value)` | Немедленная (не debounced) запись — когда нужно записать перед навигацией | `GM_setValue` |
 | `storageSetDebounced(key, value, wait?)` | Debounced-запись в `GM_setValue` (прямой вызов, не фабрика) | `GM_setValue` |
 | `storageDelete(key)` | `GM_deleteValue` с try/catch | `GM_deleteValue` |
+| `storageList(prefix?)` | Ключи хранилища, начинающиеся с `prefix`; `[]` при ошибке. Передавай префикс с разделителем на конце (`…:payload:v1:`), иначе `…:v1` захватит и `…:v12:*`. Ядро v1.5.0+ | `GM_listValues` |
+| `storagePrune(prefix, shouldDelete)` | Удаляет ключи с `prefix`, для которых `shouldDelete(value, key)` (может быть async) вернул truthy; исключение в предикате — ключ остаётся; пустой `prefix` — уборка пропускается (warn, `0`). Возвращает число удалённых. Не атомарна и идёт по ключам последовательно — вызывай после `bootstrap()`, без `await` на пути инициализации. Для уборки просроченных ключей «на объект» (`…:<loanId>`), которые иначе копятся вечно: TTL проверяется только при чтении. Ядро v1.5.0+ | `GM_listValues`, `GM_getValue`, `GM_deleteValue` |
 | `httpRequest(opts)` | Промис поверх `GM_xmlhttpRequest` | `GM_xmlhttpRequest` |
 | `api.getJson(url, headers)` / `api.postJson(url, body, headers)` / `api.getHtml(url, headers)` | Запросы через `httpRequest`, обходят CSP сайта | `GM_xmlhttpRequest` |
 | `registerDebugToggle(scriptNs, debugKey)` | Регистрирует пункт меню Tampermonkey для debug-логов, возвращает `{ value }` (async, резолвится после чтения хранилища) | `GM_getValue`, `GM_setValue`, `GM_registerMenuCommand` |

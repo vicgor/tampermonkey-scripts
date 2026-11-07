@@ -33,6 +33,8 @@ const WRAPPER_GRANTS = {
   storageSet: ['GM_setValue'],
   storageSetDebounced: ['GM_setValue'],
   storageDelete: ['GM_deleteValue'],
+  storageList: ['GM_listValues'],
+  storagePrune: ['GM_listValues', 'GM_getValue', 'GM_deleteValue'],
   httpRequest: ['GM_xmlhttpRequest'],
   'api.getJson': ['GM_xmlhttpRequest'],
   'api.postJson': ['GM_xmlhttpRequest'],
