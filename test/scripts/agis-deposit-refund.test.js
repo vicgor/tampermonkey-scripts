@@ -180,24 +180,30 @@ describe('уборка хранилища: PAYLOAD_KEY_PREFIX + shouldPrunePaylo
 
   it('удаляет просроченные и битые payload, не трогает свежие, соседнюю схему и debug', async () => {
     const now = Date.now();
+    // Соседние ключи строятся из экспортированного префикса, а не литералами: если
+    // SCRIPT_NS или версия схемы сменятся, тест продолжит проверять именно соседство.
+    const neighbourSchemaKey = PAYLOAD_KEY_PREFIX.replace(/:$/, 'x:4'); // …:payload:v1x:4
+    const debugKey = PAYLOAD_KEY_PREFIX.replace(/payload:v1:$/, 'debug'); // …:debug
+    expect(neighbourSchemaKey.startsWith(PAYLOAD_KEY_PREFIX)).toBe(false);
+    expect(debugKey.startsWith(PAYLOAD_KEY_PREFIX)).toBe(false);
     store.set(storageKey('1'), { loanId: '1', kopecks: 100, createdAt: now - 16 * 60 * 1000 });
     store.set(storageKey('2'), { loanId: '2', kopecks: 100, createdAt: now - 60_000 });
     store.set(storageKey('3'), null);
-    store.set('agis:deposit-refund:payload:v1x:4', { createdAt: 0 });
-    store.set('agis:deposit-refund:debug', true);
+    store.set(neighbourSchemaKey, { createdAt: 0 });
+    store.set(debugKey, true);
 
     const removed = await storagePrune(PAYLOAD_KEY_PREFIX, shouldPrunePayload);
 
     expect(removed).toBe(2);
-    expect([...store.keys()].sort()).toEqual(
-      ['agis:deposit-refund:debug', 'agis:deposit-refund:payload:v1x:4', storageKey('2')].sort(),
-    );
+    expect([...store.keys()].sort()).toEqual([debugKey, neighbourSchemaKey, storageKey('2')].sort());
   });
 
   it('shouldPrunePayload игнорирует второй аргумент (ключ), который передаёт storagePrune', () => {
     const fresh = { createdAt: Date.now() };
-    // isPayloadExpired(fresh, key) сравнил бы время со строкой ключа — NaN, «не просрочен»
-    // случайно; здесь важно, что ключ вообще не влияет на решение.
+    // Ошибку «передали isPayloadExpired напрямую» ловит второй expect: ключ попал бы в
+    // параметр now, now - createdAt дало бы NaN, а NaN > TTL — false, т.е. «не просрочен»
+    // для заведомо старого payload — и уборка тихо перестала бы удалять что-либо.
+    // Первый expect с этой ошибкой прошёл бы (тоже false) — он про то, что свежий не трогаем.
     expect(shouldPrunePayload(fresh, storageKey('2'))).toBe(false);
     expect(shouldPrunePayload({ createdAt: 0 }, storageKey('2'))).toBe(true);
   });
