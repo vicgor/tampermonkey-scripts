@@ -107,6 +107,23 @@ describe('storageList / storagePrune (v1.5.0)', () => {
     expect((await storageList()).sort()).toEqual(['a', 'b']);
   });
 
+  it('storageList: префикс с разделителем не захватывает соседнюю версию схемы', async () => {
+    store.set('agis:x:payload:v1:1', {});
+    store.set('agis:x:payload:v12:1', {});
+    expect(await storageList('agis:x:payload:v1:')).toEqual(['agis:x:payload:v1:1']);
+    // Без разделителя — захватит (поэтому README требует ':' на конце).
+    expect((await storageList('agis:x:payload:v1')).sort()).toEqual(['agis:x:payload:v12:1', 'agis:x:payload:v1:1']);
+  });
+
+  it('storageList: не-массив от GM_listValues — [] без warn, нестроковые ключи отбрасываются', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    globalThis.GM_listValues = () => ({ 0: 'agis:x:1' });
+    expect(await storageList('agis:x:')).toEqual([]);
+    globalThis.GM_listValues = () => ['agis:x:1', 42, null];
+    expect(await storageList('agis:x:')).toEqual(['agis:x:1']);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it('storageList поддерживает асинхронный GM_listValues', async () => {
     store.set('agis:x:1', 1);
     globalThis.GM_listValues = async () => [...store.keys()];
@@ -139,6 +156,15 @@ describe('storageList / storagePrune (v1.5.0)', () => {
     const removed = await storagePrune('agis:x:', async (_value, key) => key.endsWith(':2'));
     expect(removed).toBe(1);
     expect([...store.keys()]).toEqual(['agis:x:1']);
+  });
+
+  it.each([[''], [undefined], [null]])('storagePrune с пустым prefix (%s) ничего не удаляет', async (prefix) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    store.set('agis:x:debug', true);
+    store.set('agis:x:payload:v1:1', {});
+    expect(await storagePrune(prefix, () => true)).toBe(0);
+    expect(store.size).toBe(2);
+    expect(warn).toHaveBeenCalled();
   });
 
   it('storagePrune оставляет ключ, если предикат бросил исключение', async () => {

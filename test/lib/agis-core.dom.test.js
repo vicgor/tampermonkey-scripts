@@ -77,6 +77,17 @@ describe('waitForCondition', () => {
     await expect(pending).resolves.toBe(input);
   });
 
+  it('пустой attributeFilter игнорируется — смена атрибута не ловится', async () => {
+    document.body.innerHTML = '<div id="alert" class="alert hidden"></div>';
+    const el = document.querySelector('#alert');
+    const pending = waitForCondition(() => !el.classList.contains('hidden') && el, {
+      timeout: 150,
+      attributeFilter: [],
+    });
+    setTimeout(() => el.classList.remove('hidden'), 20);
+    await expect(pending).rejects.toThrow(/не выполнено/);
+  });
+
   it('attributeFilter включает attributes сам и игнорирует прочие атрибуты (v1.5.0)', async () => {
     document.body.innerHTML = '<div id="alert" class="alert hidden"></div>';
     const el = document.querySelector('#alert');
@@ -88,6 +99,9 @@ describe('waitForCondition', () => {
       },
       { timeout: 2000, attributeFilter: ['class'] },
     );
+    // probe() вызывается синхронно внутри waitForCondition (сразу и после подключения
+    // observer'а), поэтому к этой строке начальные вызовы уже посчитаны — дальше calls
+    // растёт только от мутаций, на которые observer подписан.
     const before = calls;
     el.setAttribute('data-noise', '1');
     await new Promise((r) => setTimeout(r, 20));
