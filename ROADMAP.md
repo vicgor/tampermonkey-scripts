@@ -83,7 +83,7 @@ googlesheet — заполнение формы не работало из-за 
 **Цель:** сделать общий каркас реально переиспользуемым, а не «каноном на бумаге».
 
 - [x] Создан `lib/agis-core.js`, экспортирует API через `window.__AGIS_CORE__`:
-  `debounce`, `cleanupRoute`, `cleanup`, `storageGet`, `storageSet`, `storageSetDebounced`, `storageDelete`, `waitForElement`, `observeAddedElements`, `httpRequest`, `api.getJson/postJson/getHtml`, `onUrlChange`, `createRouteTokenController`, `showBanner`, `registerDebugToggle`. Позже добавлены `ruMonthNumber` (v1.2.0), `normalizeText`/`cellText` (v1.3.0), `waitForCondition` (v1.4.0) — актуальный список см. в `README.md` "Что внутри".
+  `debounce`, `cleanupRoute`, `cleanup`, `storageGet`, `storageSet`, `storageSetDebounced`, `storageDelete`, `waitForElement`, `observeAddedElements`, `httpRequest`, `api.getJson/postJson/getHtml`, `onUrlChange`, `createRouteTokenController`, `showBanner`, `registerDebugToggle`. Позже добавлены `ruMonthNumber` (v1.2.0), `normalizeText`/`cellText` (v1.3.0), `waitForCondition` (v1.4.0), `storageList`/`storagePrune` и `attributes`/`attributeFilter` в `waitForCondition`/`waitForElement` (v1.5.0) — актуальный список см. в `README.md` "Что внутри".
 - [x] Опубликован через GitHub Raw + версионированные теги `v1.0.0`, `v1.1.0` (добавил `storageSet`/`storageDelete` для немедленной, не debounced записи перед навигацией) и `v1.2.0` (добавил `ruMonthNumber`, см. Волна 3) — все **с SRI-хешем** (`#sha256=...`).
 - [x] Мигрированы все 7 скриптов: `agis-paste-cleaner-amount` (пилот, PR #13/#14), `agis-linkify-loan-note` (#15), `agis-rusupport-clipboard` (#16), `agis-duplicate-income` (#18), `agis-add-income-from-googlesheet` (#19), `agis-loan-info-navbar` (#20), `agis-protocol-income-fill` (#22).
 - [x] Общий паттерн `registerDebugToggle()` — await перед первым `bootstrap()`, а не fire-and-forget (найдено и исправлено сначала в #18, затем унифицировано в linkify/rusupport через #21, сразу учтено в #22 — иначе debug-логи могли не появляться вовсе на страницах, где нужный DOM уже присутствует при старте).
@@ -291,7 +291,7 @@ googlesheet — заполнение формы не работало из-за 
 
 ## Ссылки
 
-- Общее ядро: [`lib/agis-core.js`](./lib/agis-core.js) — текущий тег `v1.4.0` (добавлен `waitForCondition`)
+- Общее ядро: [`lib/agis-core.js`](./lib/agis-core.js) — текущий тег `v1.5.0` (`storageList`/`storagePrune` для уборки ключей «на объект», `attributes`/`attributeFilter` в `waitForCondition`/`waitForElement`). Все скрипты пока на `v1.4.0`: перевод — отдельными PR, начиная с `agis-deposit-refund` и `agis-loan-force-close`, которым v1.5.0 и нужен
 - Живой пример потребителя: [`templates/example-consumer.user.js`](./templates/example-consumer.user.js)
 - Стандарты и чек-лист: [`README.md`](./README.md)
 - Policy AI-ассистента: [`space-prompt.md`](./space-prompt.md)
