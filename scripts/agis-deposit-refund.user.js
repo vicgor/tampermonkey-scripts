@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - возврат депозита
 // @namespace    agis.deposit.refund
-// @version      2.2.1
+// @version      2.3.0
 // @description  Находит «ДС на счету» (или «Депозит» в блоке «Сумма») на странице займа → кнопка «Вернуть депозит» → открывает форму транзакции и автозаполняет сумму, направление OUT и тип «Возврат депозита». Отправка формы — только вручную.
 // @match        https://agis.credit7.ru/admin/agis2/core/loan/*
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*
@@ -16,12 +16,13 @@
 // @match        https://agis.finrook.ru/admin/agis2/core/loan/*
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-deposit-refund.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-deposit-refund.user.js
-// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.4.0/lib/agis-core.js#sha256=JqxyWNETCOHKc6WMlT3E/6odW4N9iDA7zsnIOVz6uys=
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.5.0/lib/agis-core.js#sha256=NtCeXh37/rYT8WTTGPWsFqdhtzdTaYL+KRcM7XeqOaE=
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_deleteValue
+// @grant        GM_listValues
 // @grant        GM_registerMenuCommand
 // ==/UserScript==
 
@@ -60,6 +61,7 @@
       findDepositIn,
       scoreFieldDescription,
       isPayloadUsable,
+      isPayloadExpired,
     };
     return;
   }
@@ -79,6 +81,7 @@
     storageGet,
     storageSet,
     storageDelete,
+    storagePrune,
     showBanner,
     debounce,
   } = window.__AGIS_CORE__;
@@ -88,8 +91,9 @@
   const DOM_NS = 'agis-deposit-refund'; // без двоеточия — для id/CSS
   const PANEL_ID = `${DOM_NS}-panel`;
   // Ключ payload'а: namespace + версия схемы + id займа. Прежний плоский префикс
-  // agisDepositRefund:<id> (v1.x) не миграется: payload живёт максимум PAYLOAD_TTL (15 мин)
-  // и восстановим одним кликом, а GM_listValues для перебора старых ключей не заявлен в @grant.
+  // agisDepositRefund:<id> (v1.x) не миграется и не чистится: у v1.x были другие
+  // @name/@namespace, а хранилище Tampermonkey привязано к скрипту по этой паре —
+  // из этого скрипта те ключи не видны вовсе.
   const STORAGE_PREFIX = `${SCRIPT_NS}:payload:v1`;
   const DEBUG_KEY = `${SCRIPT_NS}:debug`;
   const WAIT_TIMEOUT = 30000;
@@ -196,6 +200,14 @@
     if (!Number.isFinite(payload.kopecks) || payload.kopecks <= 0) return false;
     if (!Number.isFinite(payload.createdAt)) return false;
     return now - payload.createdAt <= PAYLOAD_TTL;
+  }
+
+  // Для уборки хранилища: в отличие от isPayloadUsable, не сверяет loanId и сумму —
+  // свежий payload другого займа (подготовлен в соседней вкладке) трогать нельзя,
+  // удаляем только то, что гарантированно уже не подставится: битое или старше TTL.
+  function isPayloadExpired(payload, now = Date.now()) {
+    if (!payload || !Number.isFinite(payload.createdAt)) return true;
+    return now - payload.createdAt > PAYLOAD_TTL;
   }
 
   // --- DOM-часть ------------------------------------------------------------
@@ -497,8 +509,22 @@
     { once: true },
   );
 
+  // Разовая уборка при загрузке страницы (не на каждый SPA-переход): payload пишется
+  // на каждый займ, а удаляется только при заполнении формы — если оператор нажал
+  // «Вернуть депозит» и не дошёл до формы, ключ остался бы навсегда. Ключи с ':' на
+  // конце префикса — иначе захватили бы payload:v1x. После bootstrap() и без await:
+  // уборка не должна задерживать кнопку/заполнение формы.
+  function pruneExpiredPayloads() {
+    storagePrune(`${STORAGE_PREFIX}:`, (payload) => isPayloadExpired(payload))
+      .then((removed) => {
+        if (removed) log('Удалено просроченных payload:', removed);
+      })
+      .catch((error) => warn('Уборка хранилища не удалась:', error));
+  }
+
   (async () => {
     debugCtl = await registerDebugToggle(SCRIPT_NS, DEBUG_KEY);
     await bootstrap();
+    pruneExpiredPayloads();
   })().catch((error) => warn('Ошибка запуска:', error));
 })();

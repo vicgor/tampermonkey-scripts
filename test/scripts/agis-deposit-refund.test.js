@@ -9,6 +9,7 @@ const {
   extractDepositFromText,
   scoreFieldDescription,
   isPayloadUsable,
+  isPayloadExpired,
 } = require('../../scripts/agis-deposit-refund.user.js');
 
 describe('parseRoute', () => {
@@ -125,5 +126,29 @@ describe('isPayloadUsable', () => {
     expect(isPayloadUsable(null, '42', now)).toBe(false);
     expect(isPayloadUsable({ loanId: '42' }, '42', now)).toBe(false);
     expect(isPayloadUsable({ loanId: '42', kopecks: 100, createdAt: 'вчера' }, '42', now)).toBe(false);
+  });
+});
+
+describe('isPayloadExpired (уборка хранилища)', () => {
+  const now = 1_700_000_000_000;
+  const TTL = 15 * 60 * 1000;
+
+  it('свежий payload не трогает — даже другого займа и с нулевой суммой', () => {
+    // В отличие от isPayloadUsable: соседняя вкладка могла только что подготовить
+    // возврат по другому займу, уборка не должна его удалить.
+    expect(isPayloadExpired({ loanId: '1', kopecks: 100, createdAt: now - 60_000 }, now)).toBe(false);
+    expect(isPayloadExpired({ loanId: '2', kopecks: 0, createdAt: now }, now)).toBe(false);
+  });
+
+  it('граница TTL: ровно TTL — ещё жив, на 1 мс старше — просрочен', () => {
+    expect(isPayloadExpired({ createdAt: now - TTL }, now)).toBe(false);
+    expect(isPayloadExpired({ createdAt: now - TTL - 1 }, now)).toBe(true);
+  });
+
+  it('битый payload считается просроченным', () => {
+    expect(isPayloadExpired(null, now)).toBe(true);
+    expect(isPayloadExpired(undefined, now)).toBe(true);
+    expect(isPayloadExpired({ loanId: '42' }, now)).toBe(true);
+    expect(isPayloadExpired({ createdAt: 'вчера' }, now)).toBe(true);
   });
 });
