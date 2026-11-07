@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 const {
   parseRoute,
@@ -10,6 +10,9 @@ const {
   scoreFieldDescription,
   isPayloadUsable,
   isPayloadExpired,
+  shouldPrunePayload,
+  storageKey,
+  PAYLOAD_KEY_PREFIX,
 } = require('../../scripts/agis-deposit-refund.user.js');
 
 describe('parseRoute', () => {
@@ -150,5 +153,52 @@ describe('isPayloadExpired (уборка хранилища)', () => {
     expect(isPayloadExpired(undefined, now)).toBe(true);
     expect(isPayloadExpired({ loanId: '42' }, now)).toBe(true);
     expect(isPayloadExpired({ createdAt: 'вчера' }, now)).toBe(true);
+  });
+});
+
+// Связка целиком: тот же префикс, что у storageKey, тот же предикат, что передаёт
+// скрипт, и настоящий storagePrune ядра — с подменой GM_* (как в test/lib/agis-core.test.js).
+describe('уборка хранилища: PAYLOAD_KEY_PREFIX + shouldPrunePayload + storagePrune ядра', () => {
+  const { storagePrune } = require('../../lib/agis-core.js');
+  let store;
+  beforeEach(() => {
+    store = new Map();
+    globalThis.GM_listValues = () => [...store.keys()];
+    globalThis.GM_getValue = (key, fallback) => (store.has(key) ? store.get(key) : fallback);
+    globalThis.GM_deleteValue = (key) => store.delete(key);
+  });
+  afterEach(() => {
+    delete globalThis.GM_listValues;
+    delete globalThis.GM_getValue;
+    delete globalThis.GM_deleteValue;
+  });
+
+  it('storageKey строится из PAYLOAD_KEY_PREFIX, префикс заканчивается на ":"', () => {
+    expect(PAYLOAD_KEY_PREFIX.endsWith(':')).toBe(true);
+    expect(storageKey('42')).toBe(`${PAYLOAD_KEY_PREFIX}42`);
+  });
+
+  it('удаляет просроченные и битые payload, не трогает свежие, соседнюю схему и debug', async () => {
+    const now = Date.now();
+    store.set(storageKey('1'), { loanId: '1', kopecks: 100, createdAt: now - 16 * 60 * 1000 });
+    store.set(storageKey('2'), { loanId: '2', kopecks: 100, createdAt: now - 60_000 });
+    store.set(storageKey('3'), null);
+    store.set('agis:deposit-refund:payload:v1x:4', { createdAt: 0 });
+    store.set('agis:deposit-refund:debug', true);
+
+    const removed = await storagePrune(PAYLOAD_KEY_PREFIX, shouldPrunePayload);
+
+    expect(removed).toBe(2);
+    expect([...store.keys()].sort()).toEqual(
+      ['agis:deposit-refund:debug', 'agis:deposit-refund:payload:v1x:4', storageKey('2')].sort(),
+    );
+  });
+
+  it('shouldPrunePayload игнорирует второй аргумент (ключ), который передаёт storagePrune', () => {
+    const fresh = { createdAt: Date.now() };
+    // isPayloadExpired(fresh, key) сравнил бы время со строкой ключа — NaN, «не просрочен»
+    // случайно; здесь важно, что ключ вообще не влияет на решение.
+    expect(shouldPrunePayload(fresh, storageKey('2'))).toBe(false);
+    expect(shouldPrunePayload({ createdAt: 0 }, storageKey('2'))).toBe(true);
   });
 });
