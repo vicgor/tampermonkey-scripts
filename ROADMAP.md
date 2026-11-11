@@ -35,6 +35,10 @@
 | `agis-task-item-income-fill` | Добавлен после волн, сразу на ядре v1.4.0 (PR #49): перенос платежа из результатов сервисной команды `agis2:income:create` в форму прихода. Ключ RUSUPPORT из `#task=` в адресе — в комментарий прихода (PR #52, проверен вручную) |
 | `agis-bki-ban-note` | Добавлен после волн, сразу на ядре v1.4.0 (PR #50): ссылка `loan/<id>/edit#type=<101–107>&task=…` → «Запрет передачи в БКИ» с причиной по коду, после сохранения — заметка к займу. Вручную проверен на `berrycash` |
 
+**Отложено:**
+
+- `agis-loan-force-close` — закрытие займов по списку из Google Таблицы. [PR #51](https://github.com/vicgor/tampermonkey-scripts/pull/51) закрыт без мержа: скрипт стал не нужен. Код остался в ветке `feat/loan-force-close` (`32e6fa4`); что из него стоит переиспользовать — [комментарий к PR](https://github.com/vicgor/tampermonkey-scripts/pull/51#issuecomment-6794771469)
+
 **Оставшиеся расхождения:**
 
 - `agis-deposit-refund` с 2.1.0 работает на всех 11 доменах (канон выполнен), но вручную
@@ -291,7 +295,7 @@ googlesheet — заполнение формы не работало из-за 
 
 ## Ссылки
 
-- Общее ядро: [`lib/agis-core.js`](./lib/agis-core.js) — текущий тег `v1.5.0` (`storageList`/`storagePrune` для уборки ключей «на объект», `attributes`/`attributeFilter` в `waitForCondition`/`waitForElement`). На v1.5.0 переведён `agis-deposit-refund`; следующий — `agis-loan-force-close` (PR #51). Остальным скриптам новые функции не нужны — они остаются на `v1.4.0`
+- Общее ядро: [`lib/agis-core.js`](./lib/agis-core.js) — текущий тег `v1.5.0` (`storageList`/`storagePrune` для уборки ключей «на объект», `attributes`/`attributeFilter` в `waitForCondition`/`waitForElement`). На v1.5.0 переведён `agis-deposit-refund`. Остальным скриптам новые функции не нужны — они остаются на `v1.4.0`
 - Живой пример потребителя: [`templates/example-consumer.user.js`](./templates/example-consumer.user.js)
 - Стандарты и чек-лист: [`README.md`](./README.md)
 - Policy AI-ассистента: [`space-prompt.md`](./space-prompt.md)
