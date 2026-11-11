@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 const {
   parseRoute,
@@ -9,6 +9,10 @@ const {
   extractDepositFromText,
   scoreFieldDescription,
   isPayloadUsable,
+  isPayloadExpired,
+  shouldPrunePayload,
+  storageKey,
+  PAYLOAD_KEY_PREFIX,
 } = require('../../scripts/agis-deposit-refund.user.js');
 
 describe('parseRoute', () => {
@@ -125,5 +129,82 @@ describe('isPayloadUsable', () => {
     expect(isPayloadUsable(null, '42', now)).toBe(false);
     expect(isPayloadUsable({ loanId: '42' }, '42', now)).toBe(false);
     expect(isPayloadUsable({ loanId: '42', kopecks: 100, createdAt: 'вчера' }, '42', now)).toBe(false);
+  });
+});
+
+describe('isPayloadExpired (уборка хранилища)', () => {
+  const now = 1_700_000_000_000;
+  const TTL = 15 * 60 * 1000;
+
+  it('свежий payload не трогает — даже другого займа и с нулевой суммой', () => {
+    // В отличие от isPayloadUsable: соседняя вкладка могла только что подготовить
+    // возврат по другому займу, уборка не должна его удалить.
+    expect(isPayloadExpired({ loanId: '1', kopecks: 100, createdAt: now - 60_000 }, now)).toBe(false);
+    expect(isPayloadExpired({ loanId: '2', kopecks: 0, createdAt: now }, now)).toBe(false);
+  });
+
+  it('граница TTL: ровно TTL — ещё жив, на 1 мс старше — просрочен', () => {
+    expect(isPayloadExpired({ createdAt: now - TTL }, now)).toBe(false);
+    expect(isPayloadExpired({ createdAt: now - TTL - 1 }, now)).toBe(true);
+  });
+
+  it('битый payload считается просроченным', () => {
+    expect(isPayloadExpired(null, now)).toBe(true);
+    expect(isPayloadExpired(undefined, now)).toBe(true);
+    expect(isPayloadExpired({ loanId: '42' }, now)).toBe(true);
+    expect(isPayloadExpired({ createdAt: 'вчера' }, now)).toBe(true);
+  });
+});
+
+// Связка целиком: тот же префикс, что у storageKey, тот же предикат, что передаёт
+// скрипт, и настоящий storagePrune ядра — с подменой GM_* (как в test/lib/agis-core.test.js).
+describe('уборка хранилища: PAYLOAD_KEY_PREFIX + shouldPrunePayload + storagePrune ядра', () => {
+  const { storagePrune } = require('../../lib/agis-core.js');
+  let store;
+  beforeEach(() => {
+    store = new Map();
+    globalThis.GM_listValues = () => [...store.keys()];
+    globalThis.GM_getValue = (key, fallback) => (store.has(key) ? store.get(key) : fallback);
+    globalThis.GM_deleteValue = (key) => store.delete(key);
+  });
+  afterEach(() => {
+    delete globalThis.GM_listValues;
+    delete globalThis.GM_getValue;
+    delete globalThis.GM_deleteValue;
+  });
+
+  it('storageKey строится из PAYLOAD_KEY_PREFIX, префикс заканчивается на ":"', () => {
+    expect(PAYLOAD_KEY_PREFIX.endsWith(':')).toBe(true);
+    expect(storageKey('42')).toBe(`${PAYLOAD_KEY_PREFIX}42`);
+  });
+
+  it('удаляет просроченные и битые payload, не трогает свежие, соседнюю схему и debug', async () => {
+    const now = Date.now();
+    // Соседние ключи строятся из экспортированного префикса, а не литералами: если
+    // SCRIPT_NS или версия схемы сменятся, тест продолжит проверять именно соседство.
+    const neighbourSchemaKey = PAYLOAD_KEY_PREFIX.replace(/:$/, 'x:4'); // …:payload:v1x:4
+    const debugKey = PAYLOAD_KEY_PREFIX.replace(/payload:v1:$/, 'debug'); // …:debug
+    expect(neighbourSchemaKey.startsWith(PAYLOAD_KEY_PREFIX)).toBe(false);
+    expect(debugKey.startsWith(PAYLOAD_KEY_PREFIX)).toBe(false);
+    store.set(storageKey('1'), { loanId: '1', kopecks: 100, createdAt: now - 16 * 60 * 1000 });
+    store.set(storageKey('2'), { loanId: '2', kopecks: 100, createdAt: now - 60_000 });
+    store.set(storageKey('3'), null);
+    store.set(neighbourSchemaKey, { createdAt: 0 });
+    store.set(debugKey, true);
+
+    const removed = await storagePrune(PAYLOAD_KEY_PREFIX, shouldPrunePayload);
+
+    expect(removed).toBe(2);
+    expect([...store.keys()].sort()).toEqual([debugKey, neighbourSchemaKey, storageKey('2')].sort());
+  });
+
+  it('shouldPrunePayload игнорирует второй аргумент (ключ), который передаёт storagePrune', () => {
+    const fresh = { createdAt: Date.now() };
+    // Ошибку «передали isPayloadExpired напрямую» ловит второй expect: ключ попал бы в
+    // параметр now, now - createdAt дало бы NaN, а NaN > TTL — false, т.е. «не просрочен»
+    // для заведомо старого payload — и уборка тихо перестала бы удалять что-либо.
+    // Первый expect с этой ошибкой прошёл бы (тоже false) — он про то, что свежий не трогаем.
+    expect(shouldPrunePayload(fresh, storageKey('2'))).toBe(false);
+    expect(shouldPrunePayload({ createdAt: 0 }, storageKey('2'))).toBe(true);
   });
 });

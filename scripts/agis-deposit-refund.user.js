@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AGIS - возврат депозита
 // @namespace    agis.deposit.refund
-// @version      2.2.1
+// @version      2.3.0
 // @description  Находит «ДС на счету» (или «Депозит» в блоке «Сумма») на странице займа → кнопка «Вернуть депозит» → открывает форму транзакции и автозаполняет сумму, направление OUT и тип «Возврат депозита». Отправка формы — только вручную.
 // @match        https://agis.credit7.ru/admin/agis2/core/loan/*
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*
@@ -16,12 +16,13 @@
 // @match        https://agis.finrook.ru/admin/agis2/core/loan/*
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-deposit-refund.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-deposit-refund.user.js
-// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.4.0/lib/agis-core.js#sha256=JqxyWNETCOHKc6WMlT3E/6odW4N9iDA7zsnIOVz6uys=
+// @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.5.0/lib/agis-core.js#sha256=NtCeXh37/rYT8WTTGPWsFqdhtzdTaYL+KRcM7XeqOaE=
 // @run-at       document-start
 // @sandbox      DOM
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_deleteValue
+// @grant        GM_listValues
 // @grant        GM_registerMenuCommand
 // ==/UserScript==
 
@@ -39,6 +40,15 @@
   // через день. Объявлен до guard'а ниже — isPayloadUsable читает его по замыканию из тестов
   // (иначе при раннем return в Node-ветке вызов упал бы в TDZ).
   const PAYLOAD_TTL = 15 * 60 * 1000;
+
+  // Ключ payload'а: namespace + версия схемы + id займа. До guard'а — storageKey и
+  // уборка (shouldPrunePayload + этот префикс) экспортируются в тесты. Префикс общий
+  // для записи и уборки и заканчивается на ':', чтобы storagePrune не захватил payload:v1x.
+  // Прежний плоский префикс agisDepositRefund:<id> (v1.x) не миграется и не чистится:
+  // у v1.x были другие @name/@namespace, а хранилище Tampermonkey привязано к скрипту
+  // по этой паре — из этого скрипта те ключи не видны вовсе.
+  const SCRIPT_NS = 'agis:deposit-refund';
+  const PAYLOAD_KEY_PREFIX = `${SCRIPT_NS}:payload:v1:`;
 
   // normalizeText приходит из ядра (window.__AGIS_CORE__), локальной копии больше нет —
   // let, значение назначается в одной из двух веток ниже.
@@ -60,6 +70,10 @@
       findDepositIn,
       scoreFieldDescription,
       isPayloadUsable,
+      isPayloadExpired,
+      shouldPrunePayload,
+      storageKey,
+      PAYLOAD_KEY_PREFIX,
     };
     return;
   }
@@ -79,18 +93,14 @@
     storageGet,
     storageSet,
     storageDelete,
+    storagePrune,
     showBanner,
     debounce,
   } = window.__AGIS_CORE__;
   normalizeText = window.__AGIS_CORE__.normalizeText;
 
-  const SCRIPT_NS = 'agis:deposit-refund';
   const DOM_NS = 'agis-deposit-refund'; // без двоеточия — для id/CSS
   const PANEL_ID = `${DOM_NS}-panel`;
-  // Ключ payload'а: namespace + версия схемы + id займа. Прежний плоский префикс
-  // agisDepositRefund:<id> (v1.x) не миграется: payload живёт максимум PAYLOAD_TTL (15 мин)
-  // и восстановим одним кликом, а GM_listValues для перебора старых ключей не заявлен в @grant.
-  const STORAGE_PREFIX = `${SCRIPT_NS}:payload:v1`;
   const DEBUG_KEY = `${SCRIPT_NS}:debug`;
   const WAIT_TIMEOUT = 30000;
 
@@ -198,11 +208,26 @@
     return now - payload.createdAt <= PAYLOAD_TTL;
   }
 
-  // --- DOM-часть ------------------------------------------------------------
+  // Для уборки хранилища: в отличие от isPayloadUsable, не сверяет loanId и сумму —
+  // свежий payload другого займа (подготовлен в соседней вкладке) трогать нельзя,
+  // удаляем только то, что гарантированно уже не подставится: битое или старше TTL.
+  function isPayloadExpired(payload, now = Date.now()) {
+    if (!payload || !Number.isFinite(payload.createdAt)) return true;
+    return now - payload.createdAt > PAYLOAD_TTL;
+  }
+
+  // Предикат для storagePrune. Отдельная функция, а не isPayloadExpired напрямую:
+  // storagePrune вызывает shouldDelete(value, key), а второй параметр isPayloadExpired —
+  // now. storagePrune(prefix, isPayloadExpired) тихо сравнивал бы время со строкой ключа.
+  function shouldPrunePayload(payload) {
+    return isPayloadExpired(payload);
+  }
 
   function storageKey(loanId) {
-    return `${STORAGE_PREFIX}:${loanId}`;
+    return `${PAYLOAD_KEY_PREFIX}${loanId}`;
   }
+
+  // --- DOM-часть ------------------------------------------------------------
 
   function findDeposit() {
     return findDepositIn(document.body);
@@ -497,8 +522,31 @@
     { once: true },
   );
 
+  // Разовая уборка при загрузке страницы (не на каждый SPA-переход): payload пишется
+  // на каждый займ, а удаляется только при заполнении формы — если оператор нажал
+  // «Вернуть депозит» и не дошёл до формы, ключ остался бы навсегда. После bootstrap()
+  // и без await: уборка не должна задерживать кнопку/заполнение формы.
+  //
+  // Гонка с другой вкладкой: storagePrune не атомарен, и если ровно между чтением
+  // просроченного payload и его удалением оператор во второй вкладке снова нажмёт
+  // «Вернуть депозит» по ТОМУ ЖЕ займу, свежая запись удалится. Перечитывание перед
+  // удалением не спасает: GM-хранилище синхронизируется между вкладками асинхронно,
+  // любая проверка-затем-удаление оставляет окно. Последствие видно сразу — кнопка
+  // покажет «Не удалось сохранить сумму возврата» (повторное чтение после записи), либо
+  // форма транзакции откроется без автозаполнения и без баннера (для неё «нет payload» —
+  // штатный случай). Оба лечатся повторным кликом; окно — миллисекунды на загрузке
+  // страницы, поэтому принимаем, а не усложняем.
+  function pruneExpiredPayloads() {
+    storagePrune(PAYLOAD_KEY_PREFIX, shouldPrunePayload)
+      .then((removed) => {
+        if (removed) log('Удалено просроченных payload:', removed);
+      })
+      .catch((error) => warn('Уборка хранилища не удалась:', error));
+  }
+
   (async () => {
     debugCtl = await registerDebugToggle(SCRIPT_NS, DEBUG_KEY);
     await bootstrap();
+    pruneExpiredPayloads();
   })().catch((error) => warn('Ошибка запуска:', error));
 })();
