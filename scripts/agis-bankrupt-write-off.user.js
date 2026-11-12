@@ -14,6 +14,8 @@
 // @match        https://agis.ikracredit.ru/admin/supportprocess/domain/supportprocess/list*
 // @match        https://agis.zaimix.ru/admin/supportprocess/domain/supportprocess/list*
 // @match        https://agis.finrook.ru/admin/supportprocess/domain/supportprocess/list*
+// @match        https://agis.mkksmev.ru/admin/supportprocess/domain/supportprocess/list*
+// @match        https://agis.nadodeneg.ru/admin/supportprocess/domain/supportprocess/list*
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-bankrupt-write-off.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-bankrupt-write-off.user.js
 // @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.5.0/lib/agis-core.js#sha256=NtCeXh37/rYT8WTTGPWsFqdhtzdTaYL+KRcM7XeqOaE=
@@ -34,6 +36,8 @@
 // @connect      agis.ikracredit.ru
 // @connect      agis.zaimix.ru
 // @connect      agis.finrook.ru
+// @connect      agis.mkksmev.ru
+// @connect      agis.nadodeneg.ru
 // ==/UserScript==
 
 // @run-at document-start — как во всех скриптах проекта: onUrlChange ставится до старта страницы,
