@@ -193,4 +193,14 @@ describe('parseIncomeLinkHash', () => {
     expect(parseIncomeLinkHash('#incomeDate=2026-11-05T10:00&amount=1').error).toMatch(/дата/);
     expect(parseIncomeLinkHash('#amount=100').error).toMatch(/дата/);
   });
+  it('сумма строго до двух знаков: 16.426 не превращается в 16426', () => {
+    expect(parseIncomeLinkHash('#incomeDate=2026-11-05&amount=16.426').error).toMatch(/не распознана/);
+    expect(parseIncomeLinkHash('#incomeDate=2026-11-05&amount=abc').error).toMatch(/не распознана/);
+    expect(parseIncomeLinkHash('#incomeDate=2026-11-05&amount=16426.5').amount).toBe('16426.5');
+  });
+  it('несуществующая дата — error', () => {
+    expect(parseIncomeLinkHash('#incomeDate=2026-13-45&amount=1').error).toMatch(/дата/);
+    expect(parseIncomeLinkHash('#incomeDate=31.02.2026&amount=1').error).toMatch(/дата/);
+    expect(parseIncomeLinkHash('#incomeDate=5.11.2026&amount=1').error).toBe('');
+  });
 });

@@ -74,7 +74,10 @@
 
   // Ссылка на займ с параметрами прихода: допустимые даты и путь страницы займа.
   // Объявлены до guard'а — их читают экспортируемые для теста функции.
-  const LINK_DATE_RE = /^(?:\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.\d{4})$/;
+  const LINK_DATE_RE = /^(?:(\d{4})-(\d{2})-(\d{2})|(\d{1,2})\.(\d{1,2})\.(\d{4}))$/;
+  // Сумма в ссылке — строго не больше двух знаков после разделителя: эвристика parseAmount
+  // прочла бы «16.426» как 16426. Пробелы (разделители тысяч) допускаются.
+  const LINK_AMOUNT_RE = /^\d+(?:[.,]\d{1,2})?$/;
   const LOAN_EDIT_RE = /\/admin\/agis2\/core\/(loan|loan-overdue)\/(\d+)\/edit/;
 
   // Маппинг значения income-type из параметров команды (или incomeType из ссылки) → текст
@@ -253,19 +256,31 @@
 
   // Ссылка на займ из рецепта поддержки (income.py печатает её по тексту тикета):
   // #task=RUSUPPORT-77537&incomeDate=2026-11-05&amount=16426.00[&incomeType=Почта России][&paymentId=…].
+  // Формат, который понимает toFormDateTime (остальное ушло бы в форму как есть), и реальная
+  // календарная дата: 2026-13-45 по формату проходит.
+  function isLinkDateValid(text) {
+    const m = String(text ?? '').match(LINK_DATE_RE);
+    if (!m) return false;
+    const [y, mo, d] = m[1] ? [m[1], m[2], m[3]] : [m[6], m[5], m[4]];
+    const date = new Date(Number(y), Number(mo) - 1, Number(d));
+    return date.getFullYear() === Number(y) && date.getMonth() === Number(mo) - 1 && date.getDate() === Number(d);
+  }
+
   // null — в hash нет ни даты, ни суммы (обычное открытие займа). error — параметры есть, но
   // негодные: такой платёж не сохраняется. ticketInvalid — task есть, но не похож на ключ тикета.
   function parseIncomeLinkHash(hash) {
     const params = new URLSearchParams(String(hash ?? '').replace(/^#/, ''));
     if (!params.has('incomeDate') && !params.has('amount')) return null;
     const incomeDate = normalizeText(params.get('incomeDate') ?? '');
-    const amount = parseAmount(params.get('amount'));
+    const rawAmount = normalizeText(params.get('amount') ?? '');
+    const amount = parseAmount(rawAmount);
     const ticket = parseTicketFromHash(hash);
     let error = '';
-    // Форматы, которые понимает toFormDateTime; остальное ушло бы в форму как есть.
-    if (!LINK_DATE_RE.test(incomeDate)) error = `дата «${incomeDate}» не распознана (нужно YYYY-MM-DD)`;
-    // Нулевая и отрицательная сумма — не приход.
-    else if (!(Number(amount) > 0)) error = `сумма «${params.get('amount') ?? ''}» не больше нуля`;
+    if (!isLinkDateValid(incomeDate)) error = `дата «${incomeDate}» не распознана (нужно YYYY-MM-DD)`;
+    else if (!LINK_AMOUNT_RE.test(rawAmount.replace(/\s/g, '')))
+      error = `сумма «${rawAmount}» не распознана (нужно 16426.00)`;
+    // Нулевая сумма — не приход (отрицательную отсекает формат выше).
+    else if (!(Number(amount) > 0)) error = `сумма «${rawAmount}» не больше нуля`;
     return {
       ticket: ticket || '',
       ticketInvalid: ticket === '',
@@ -410,6 +425,10 @@
 
   // --- Страница займа, открытая по ссылке с параметрами прихода ---
 
+  function removeCreateIncomeLink() {
+    document.querySelector(`#${DOM_NS}-create-link`)?.remove();
+  }
+
   function addCreateIncomeLink(href, data) {
     // Кнопка переиспользуется: новая ссылка без перезагрузки (hashchange) обновляет сумму и адрес.
     let link = document.querySelector(`#${DOM_NS}-create-link`);
@@ -436,6 +455,8 @@
     const [, loanType, loanId] = match;
 
     if (link.error) {
+      // Кнопка от предыдущей ссылки (смена hash без перезагрузки) вела бы к прежнему платежу.
+      removeCreateIncomeLink();
       showBanner(`Ссылка с платежом не принята: ${link.error}. Платёж не сохранён.`, {
         type: 'error',
         durationMs: 8000,
@@ -461,6 +482,7 @@
     if (!routeTokenController.isCurrent(token)) return;
     if (!saved || saved.savedAt !== payload.savedAt) {
       warn('Payload из ссылки не записался в GM-хранилище.');
+      removeCreateIncomeLink();
       // Hash не трогаем: F5 повторит попытку.
       showBanner('Не удалось сохранить данные платежа из ссылки — обновите страницу.', {
         type: 'error',
