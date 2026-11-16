@@ -1,41 +1,63 @@
 // ==UserScript==
 // @name         AGIS - вставка прихода из результатов команды
 // @namespace    agis.task.item.income.fill
-// @version      1.2.0
-// @description  Клик по строке результатов сервисной команды (agis2:income:create) сохраняет платёж; переход на приходы займа; на форме создания кнопка заполняет дату, сумму, вид прихода и комментарий (тикет из #task=RUSUPPORT-NNNNN в адресе страницы команды).
+// @version      1.3.0
+// @description  Клик по строке результатов сервисной команды (agis2:income:create) или ссылка на займ с #task=…&incomeDate=…&amount=…[&incomeType=…][&paymentId=…] сохраняет платёж; на форме создания кнопка заполняет дату, сумму, вид прихода, номер и комментарий (тикет из #task=RUSUPPORT-NNNNN).
 // @match        https://agis.volgazaim.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*/income/create*
 // @match        https://agis.volgazaim.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.volgazaim.ru/admin/agis2/core/loan/*/edit*
+// @match        https://agis.volgazaim.ru/admin/agis2/core/loan-overdue/*/edit*
 // @match        https://agis.creditsmile.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*/income/create*
 // @match        https://agis.creditsmile.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.creditsmile.ru/admin/agis2/core/loan/*/edit*
+// @match        https://agis.creditsmile.ru/admin/agis2/core/loan-overdue/*/edit*
 // @match        https://agis.moneymania.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
 // @match        https://agis.moneymania.ru/admin/agis2/core/loan/*/income/create*
 // @match        https://agis.moneymania.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.moneymania.ru/admin/agis2/core/loan/*/edit*
+// @match        https://agis.moneymania.ru/admin/agis2/core/loan-overdue/*/edit*
 // @match        https://agis.berrycash.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
 // @match        https://agis.berrycash.ru/admin/agis2/core/loan/*/income/create*
 // @match        https://agis.berrycash.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.berrycash.ru/admin/agis2/core/loan/*/edit*
+// @match        https://agis.berrycash.ru/admin/agis2/core/loan-overdue/*/edit*
 // @match        https://agis.belkacredit.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
 // @match        https://agis.belkacredit.ru/admin/agis2/core/loan/*/income/create*
 // @match        https://agis.belkacredit.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.belkacredit.ru/admin/agis2/core/loan/*/edit*
+// @match        https://agis.belkacredit.ru/admin/agis2/core/loan-overdue/*/edit*
 // @match        https://agis.credit7.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
 // @match        https://agis.credit7.ru/admin/agis2/core/loan/*/income/create*
 // @match        https://agis.credit7.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.credit7.ru/admin/agis2/core/loan/*/edit*
+// @match        https://agis.credit7.ru/admin/agis2/core/loan-overdue/*/edit*
 // @match        https://agis.credit365.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
 // @match        https://agis.credit365.ru/admin/agis2/core/loan/*/income/create*
 // @match        https://agis.credit365.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.credit365.ru/admin/agis2/core/loan/*/edit*
+// @match        https://agis.credit365.ru/admin/agis2/core/loan-overdue/*/edit*
 // @match        https://agis.vashcash.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
 // @match        https://agis.vashcash.ru/admin/agis2/core/loan/*/income/create*
 // @match        https://agis.vashcash.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.vashcash.ru/admin/agis2/core/loan/*/edit*
+// @match        https://agis.vashcash.ru/admin/agis2/core/loan-overdue/*/edit*
 // @match        https://agis.ikracredit.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
 // @match        https://agis.ikracredit.ru/admin/agis2/core/loan/*/income/create*
 // @match        https://agis.ikracredit.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.ikracredit.ru/admin/agis2/core/loan/*/edit*
+// @match        https://agis.ikracredit.ru/admin/agis2/core/loan-overdue/*/edit*
 // @match        https://agis.zaimix.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
 // @match        https://agis.zaimix.ru/admin/agis2/core/loan/*/income/create*
 // @match        https://agis.zaimix.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.zaimix.ru/admin/agis2/core/loan/*/edit*
+// @match        https://agis.zaimix.ru/admin/agis2/core/loan-overdue/*/edit*
 // @match        https://agis.finrook.ru/admin/supportprocess/domain/supportprocesstask/*/supportprocesstaskitem/list*
 // @match        https://agis.finrook.ru/admin/agis2/core/loan/*/income/create*
 // @match        https://agis.finrook.ru/admin/agis2/core/loan-overdue/*/income/create*
+// @match        https://agis.finrook.ru/admin/agis2/core/loan/*/edit*
+// @match        https://agis.finrook.ru/admin/agis2/core/loan-overdue/*/edit*
 // @updateURL    https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-task-item-income-fill.user.js
 // @downloadURL  https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/main/scripts/agis-task-item-income-fill.user.js
 // @require      https://raw.githubusercontent.com/vicgor/tampermonkey-scripts/v1.4.0/lib/agis-core.js#sha256=JqxyWNETCOHKc6WMlT3E/6odW4N9iDA7zsnIOVz6uys=
@@ -50,8 +72,9 @@
 (() => {
   'use strict';
 
-  // Маппинг значения income-type из параметров команды → текст опции «Вид прихода».
-  // Поиск регистронезависимый (см. resolveIncomeTypeOption). Объявлен до guard'а ниже,
+  // Маппинг значения income-type из параметров команды (или incomeType из ссылки) → текст
+  // опции «Вид прихода». Коды MI_* — значения ManualIncomeType в AGIS. Поиск регистронезависимый
+  // (см. resolveIncomeTypeOption). Объявлен до guard'а ниже,
   // т.к. экспортируемые для теста функции читают его по замыканию (иначе TDZ).
   const INCOME_TYPE_MAP = {
     цессия: 'Цессия',
@@ -60,6 +83,12 @@
     'возврат продукта': 'Возврат продукта',
     mi_refund_product: 'Возврат продукта',
     иное: 'Иное',
+    mi_other: 'Иное',
+    mi_russianpost: 'Почта России',
+    mi_tinkoff: 'Tinkoff',
+    mi_alfa: 'Альфа-Банк',
+    mi_siab: 'СИАБ-Банк',
+    mi_contact: 'Contact',
   };
 
   // normalizeText приходит из ядра — let, значение назначается в одной из двух веток ниже.
@@ -76,6 +105,7 @@
       resolveIncomeTypeOption,
       parseTicketFromHash,
       buildComment,
+      parseIncomeLinkHash,
     };
     return;
   }
@@ -213,6 +243,23 @@
     return ticket || normalizeText(paramComment);
   }
 
+  // Ссылка на займ из рецепта поддержки (income.py печатает её по тексту тикета):
+  // #task=RUSUPPORT-77537&incomeDate=2026-11-05&amount=16426.00[&incomeType=Почта России][&paymentId=…].
+  // null — в hash нет даты или суммы (обычное открытие займа).
+  function parseIncomeLinkHash(hash) {
+    const params = new URLSearchParams(String(hash ?? '').replace(/^#/, ''));
+    const incomeDate = normalizeText(params.get('incomeDate') ?? '');
+    const amount = parseAmount(params.get('amount'));
+    if (!incomeDate || !amount) return null;
+    return {
+      ticket: parseTicketFromHash(hash) || '',
+      incomeDate,
+      amount,
+      incomeType: normalizeText(params.get('incomeType') ?? ''),
+      paymentId: normalizeText(params.get('paymentId') ?? ''),
+    };
+  }
+
   // --- Страница результатов команды (supportprocesstaskitem/list) ---
 
   function findParamsColumnIndex(table) {
@@ -342,6 +389,63 @@
     });
 
     log('Строк в таблице:', rows.length, 'привязано:', bound);
+  }
+
+  // --- Страница займа, открытая по ссылке с параметрами прихода ---
+
+  function addCreateIncomeLink(href, data) {
+    if (document.querySelector(`#${DOM_NS}-create-link`)) return;
+    const link = document.createElement('a');
+    link.id = `${DOM_NS}-create-link`;
+    link.className = 'btn btn-success';
+    link.href = href;
+    link.textContent = `Создать приход ${data.amount}`;
+    // Ниже баннера ядра (top: 60px), чтобы не перекрывать его текст.
+    Object.assign(link.style, { position: 'fixed', top: '130px', right: '20px', zIndex: '99999' });
+    document.body.appendChild(link);
+  }
+
+  async function initLoanEditPage(token) {
+    const link = parseIncomeLinkHash(location.hash);
+    // Без параметров (в т.ч. повторный bootstrap после очистки hash ниже) — ничего не делаем.
+    if (!link) return;
+
+    const match = location.pathname.match(/\/admin\/agis2\/core\/(loan|loan-overdue)\/(\d+)\/edit/);
+    if (!match) return;
+    const [, loanType, loanId] = match;
+
+    const payload = {
+      itemId: '',
+      loanId,
+      incomeDate: link.incomeDate,
+      amount: link.amount,
+      incomeType: link.incomeType,
+      comment: link.ticket,
+      orderNumber: link.paymentId || '-',
+      savedAt: Date.now(),
+    };
+    log('Пайлоад из ссылки:', payload);
+
+    try {
+      await storageSet(STORAGE_KEY, payload);
+    } catch (error) {
+      warn('Не удалось сохранить payload:', error);
+      showBanner('Не удалось сохранить данные платежа из ссылки.', { type: 'error', durationMs: 4000 });
+      return;
+    }
+    if (!routeTokenController.isCurrent(token)) return;
+
+    showBanner(
+      `Сохранён платёж ${payload.amount} от ${payload.incomeDate}` +
+        `${payload.incomeType ? ` (${payload.incomeType})` : ''}` +
+        `${link.paymentId ? `, ИД ${link.paymentId}` : ''} для займа ${loanId}` +
+        `${link.ticket ? `, ${link.ticket}` : ' — тикет не задан'}.`,
+      { type: link.ticket ? 'success' : 'error', durationMs: 8000 },
+    );
+    addCreateIncomeLink(`/admin/agis2/core/${loanType}/${loanId}/income/create`, payload);
+
+    // F5 не должен перезаписать payload повторно (например, после вставки на форме).
+    history.replaceState(history.state, '', location.pathname + location.search);
   }
 
   // --- Страница создания прихода ---
@@ -550,6 +654,11 @@
     // income/list не матчится: Sonata не SPA, переход на create — полная загрузка страницы.
     if (/\/admin\/agis2\/core\/(?:loan|loan-overdue)\/\d+\/income\/create/.test(path)) {
       await initCreatePage(token);
+      return;
+    }
+
+    if (/\/admin\/agis2\/core\/(?:loan|loan-overdue)\/\d+\/edit/.test(path)) {
+      await initLoanEditPage(token);
     }
   }
 
