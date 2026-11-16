@@ -90,6 +90,11 @@ describe('resolveIncomeTypeOption', () => {
     expect(resolveIncomeTypeOption(options, 'mi_cession')).toBe('mi_cession');
     expect(resolveIncomeTypeOption(options, 'mi_refund_product')).toBe('mi_refund_product');
   });
+  it('код MI_* находится по value опции, даже если текст другой', () => {
+    const renamed = [{ value: 'MI_Alfa', text: 'Альфа Банк (новое название)' }];
+    expect(resolveIncomeTypeOption(renamed, 'MI_Alfa')).toBe('MI_Alfa');
+    expect(resolveIncomeTypeOption(renamed, 'mi_alfa')).toBe('MI_Alfa');
+  });
   it('Почта России: текст опции и код MI_RussianPost', () => {
     expect(resolveIncomeTypeOption(options, 'Почта России')).toBe('MI_RussianPost');
     expect(resolveIncomeTypeOption(options, 'MI_RussianPost')).toBe('MI_RussianPost');
@@ -151,28 +156,41 @@ describe('parseIncomeLinkHash', () => {
       '#task=RUSUPPORT-77537&incomeDate=2026-11-05&amount=16426.00&incomeType=%D0%9F%D0%BE%D1%87%D1%82%D0%B0%20%D0%A0%D0%BE%D1%81%D1%81%D0%B8%D0%B8&paymentId=A123';
     expect(parseIncomeLinkHash(hash)).toEqual({
       ticket: 'RUSUPPORT-77537',
+      ticketInvalid: false,
       incomeDate: '2026-11-05',
       amount: '16426.00',
       incomeType: 'Почта России',
       paymentId: 'A123',
+      error: '',
     });
   });
   it('без task, вида и ИД платежа; сумма с пробелами и запятой', () => {
     expect(parseIncomeLinkHash('#incomeDate=05.11.2026&amount=16%20426,00')).toEqual({
       ticket: '',
+      ticketInvalid: false,
       incomeDate: '05.11.2026',
       amount: '16426.00',
       incomeType: '',
       paymentId: '',
+      error: '',
     });
   });
-  it('некорректный task — тикет пустой', () => {
-    expect(parseIncomeLinkHash('#task=abc&incomeDate=2026-11-05&amount=1').ticket).toBe('');
+  it('некорректный task — тикет пустой, ticketInvalid', () => {
+    const link = parseIncomeLinkHash('#task=abc&incomeDate=2026-11-05&amount=1');
+    expect(link.ticket).toBe('');
+    expect(link.ticketInvalid).toBe(true);
+    expect(link.error).toBe('');
   });
-  it('нет суммы или даты — null (обычное открытие займа)', () => {
-    expect(parseIncomeLinkHash('#task=RUSUPPORT-1&incomeDate=2026-11-05')).toBeNull();
-    expect(parseIncomeLinkHash('#task=RUSUPPORT-1&amount=100')).toBeNull();
+  it('нет ни даты, ни суммы — null (обычное открытие займа)', () => {
+    expect(parseIncomeLinkHash('#task=RUSUPPORT-1')).toBeNull();
     expect(parseIncomeLinkHash('')).toBeNull();
     expect(parseIncomeLinkHash(undefined)).toBeNull();
+  });
+  it('негодные дата или сумма — error, платёж не сохраняется', () => {
+    expect(parseIncomeLinkHash('#task=RUSUPPORT-1&incomeDate=2026-11-05').error).toMatch(/сумма/);
+    expect(parseIncomeLinkHash('#incomeDate=2026-11-05&amount=0').error).toMatch(/сумма/);
+    expect(parseIncomeLinkHash('#incomeDate=2026-11-05&amount=-5').error).toMatch(/сумма/);
+    expect(parseIncomeLinkHash('#incomeDate=2026-11-05T10:00&amount=1').error).toMatch(/дата/);
+    expect(parseIncomeLinkHash('#amount=100').error).toMatch(/дата/);
   });
 });
