@@ -74,7 +74,9 @@
 
   // Ссылка на займ с параметрами прихода: допустимые даты и путь страницы займа.
   // Объявлены до guard'а — их читают экспортируемые для теста функции.
-  const LINK_DATE_RE = /^(?:(\d{4})-(\d{2})-(\d{2})|(\d{1,2})\.(\d{1,2})\.(\d{4}))$/;
+  // Время — при переносе платежа с другого займа (сохраняется исходное); без него при вставке
+  // подставляется текущее.
+  const LINK_DATE_RE = /^(?:(\d{4})-(\d{2})-(\d{2})(?: (\d{2}):(\d{2}):(\d{2}))?|(\d{1,2})\.(\d{1,2})\.(\d{4}))$/;
   // Сумма в ссылке — строго не больше двух знаков после разделителя: эвристика parseAmount
   // прочла бы «16.426» как 16426. Пробелы (разделители тысяч) допускаются.
   const LINK_AMOUNT_RE = /^\d+(?:[.,]\d{1,2})?$/;
@@ -255,15 +257,17 @@
   }
 
   // Ссылка на займ из рецепта поддержки (income.py печатает её по тексту тикета):
-  // #task=RUSUPPORT-77537&incomeDate=2026-11-05&amount=16426.00[&incomeType=Почта России][&paymentId=…].
-  // Формат, который понимает toFormDateTime (остальное ушло бы в форму как есть), и реальная
-  // календарная дата: 2026-13-45 по формату проходит.
+  // #task=RUSUPPORT-77537&incomeDate=2026-11-05[ 16:57:08]&amount=16426.00[&incomeType=Почта России|MI_Tinkoff][&paymentId=…].
+  // Формат, который понимает toFormDateTime (остальное ушло бы в форму как есть), и реальные
+  // дата и время: 2026-13-45 и 25:00:00 по формату проходят.
   function isLinkDateValid(text) {
     const m = String(text ?? '').match(LINK_DATE_RE);
     if (!m) return false;
-    const [y, mo, d] = m[1] ? [m[1], m[2], m[3]] : [m[6], m[5], m[4]];
+    const [y, mo, d] = m[1] ? [m[1], m[2], m[3]] : [m[9], m[8], m[7]];
     const date = new Date(Number(y), Number(mo) - 1, Number(d));
-    return date.getFullYear() === Number(y) && date.getMonth() === Number(mo) - 1 && date.getDate() === Number(d);
+    const dateOk =
+      date.getFullYear() === Number(y) && date.getMonth() === Number(mo) - 1 && date.getDate() === Number(d);
+    return dateOk && (!m[4] || (Number(m[4]) < 24 && Number(m[5]) < 60 && Number(m[6]) < 60));
   }
 
   // null — в hash нет ни даты, ни суммы (обычное открытие займа). error — параметры есть, но
@@ -276,7 +280,7 @@
     const amount = parseAmount(rawAmount);
     const ticket = parseTicketFromHash(hash);
     let error = '';
-    if (!isLinkDateValid(incomeDate)) error = `дата «${incomeDate}» не распознана (нужно YYYY-MM-DD)`;
+    if (!isLinkDateValid(incomeDate)) error = `дата «${incomeDate}» не распознана (нужно YYYY-MM-DD[ HH:MM:SS])`;
     else if (!LINK_AMOUNT_RE.test(rawAmount.replace(/\s/g, '')))
       error = `сумма «${rawAmount}» не распознана (нужно 16426.00)`;
     // Нулевая сумма — не приход (отрицательную отсекает формат выше).

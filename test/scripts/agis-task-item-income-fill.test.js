@@ -198,6 +198,16 @@ describe('parseIncomeLinkHash', () => {
     expect(parseIncomeLinkHash('#incomeDate=2026-11-05&amount=abc').error).toMatch(/не распознана/);
     expect(parseIncomeLinkHash('#incomeDate=2026-11-05&amount=16426.5').amount).toBe('16426.5');
   });
+  it('перенос платежа: дата со временем сохраняет исходное время, код вида прихода', () => {
+    const link = parseIncomeLinkHash(
+      '#task=RUSUPPORT-77541&incomeDate=2026-11-06%2016%3A57%3A08&amount=7620.00&incomeType=MI_Tinkoff',
+    );
+    expect(link.error).toBe('');
+    expect(link.incomeDate).toBe('2026-11-06 16:57:08');
+    expect(link.incomeType).toBe('MI_Tinkoff');
+    expect(toFormDateTime(link.incomeDate, new Date(2026, 10, 16, 9, 0, 0))).toBe('2026-11-06 16:57:08');
+    expect(parseIncomeLinkHash('#incomeDate=2026-11-06%2025%3A00%3A00&amount=1').error).toMatch(/дата/);
+  });
   it('несуществующая дата — error', () => {
     expect(parseIncomeLinkHash('#incomeDate=2026-13-45&amount=1').error).toMatch(/дата/);
     expect(parseIncomeLinkHash('#incomeDate=31.02.2026&amount=1').error).toMatch(/дата/);
