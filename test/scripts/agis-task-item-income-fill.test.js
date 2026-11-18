@@ -6,6 +6,7 @@ import {
   resolveIncomeTypeOption,
   parseTicketFromHash,
   buildComment,
+  parseIncomeLinkHash,
 } from '../../scripts/agis-task-item-income-fill.user.js';
 
 describe('parseParamLines', () => {
@@ -78,6 +79,7 @@ describe('resolveIncomeTypeOption', () => {
     { value: 'mi_tinkoff', text: 'Tinkoff' },
     { value: 'mi_cession', text: 'Цессия' },
     { value: 'mi_refund_product', text: 'Возврат продукта' },
+    { value: 'MI_RussianPost', text: 'Почта России' },
   ];
   it('цессия → Цессия (регистронезависимо)', () => {
     expect(resolveIncomeTypeOption(options, 'цессия')).toBe('mi_cession');
@@ -87,6 +89,15 @@ describe('resolveIncomeTypeOption', () => {
     expect(resolveIncomeTypeOption(options, 'cession')).toBe('mi_cession');
     expect(resolveIncomeTypeOption(options, 'mi_cession')).toBe('mi_cession');
     expect(resolveIncomeTypeOption(options, 'mi_refund_product')).toBe('mi_refund_product');
+  });
+  it('код MI_* находится по value опции, даже если текст другой', () => {
+    const renamed = [{ value: 'MI_Alfa', text: 'Альфа Банк (новое название)' }];
+    expect(resolveIncomeTypeOption(renamed, 'MI_Alfa')).toBe('MI_Alfa');
+    expect(resolveIncomeTypeOption(renamed, 'mi_alfa')).toBe('MI_Alfa');
+  });
+  it('Почта России: текст опции и код MI_RussianPost', () => {
+    expect(resolveIncomeTypeOption(options, 'Почта России')).toBe('MI_RussianPost');
+    expect(resolveIncomeTypeOption(options, 'MI_RussianPost')).toBe('MI_RussianPost');
   });
   it('NBSP и лишние пробелы нормализуются', () => {
     expect(resolveIncomeTypeOption(options, '\u00a0цессия  ')).toBe('mi_cession');
@@ -136,5 +147,70 @@ describe('buildComment', () => {
   it('без тикета — comment из параметров или пусто', () => {
     expect(buildComment('', ' Добавление приходов Цессия ')).toBe('Добавление приходов Цессия');
     expect(buildComment('', undefined)).toBe('');
+  });
+});
+
+describe('parseIncomeLinkHash', () => {
+  it('полный набор параметров ссылки из рецепта', () => {
+    const hash =
+      '#task=RUSUPPORT-77537&incomeDate=2026-11-05&amount=16426.00&incomeType=%D0%9F%D0%BE%D1%87%D1%82%D0%B0%20%D0%A0%D0%BE%D1%81%D1%81%D0%B8%D0%B8&paymentId=A123';
+    expect(parseIncomeLinkHash(hash)).toEqual({
+      ticket: 'RUSUPPORT-77537',
+      ticketInvalid: false,
+      incomeDate: '2026-11-05',
+      amount: '16426.00',
+      incomeType: 'Почта России',
+      paymentId: 'A123',
+      error: '',
+    });
+  });
+  it('без task, вида и ИД платежа; сумма с пробелами и запятой', () => {
+    expect(parseIncomeLinkHash('#incomeDate=05.11.2026&amount=16%20426,00')).toEqual({
+      ticket: '',
+      ticketInvalid: false,
+      incomeDate: '05.11.2026',
+      amount: '16426.00',
+      incomeType: '',
+      paymentId: '',
+      error: '',
+    });
+  });
+  it('некорректный task — тикет пустой, ticketInvalid', () => {
+    const link = parseIncomeLinkHash('#task=abc&incomeDate=2026-11-05&amount=1');
+    expect(link.ticket).toBe('');
+    expect(link.ticketInvalid).toBe(true);
+    expect(link.error).toBe('');
+  });
+  it('нет ни даты, ни суммы — null (обычное открытие займа)', () => {
+    expect(parseIncomeLinkHash('#task=RUSUPPORT-1')).toBeNull();
+    expect(parseIncomeLinkHash('')).toBeNull();
+    expect(parseIncomeLinkHash(undefined)).toBeNull();
+  });
+  it('негодные дата или сумма — error, платёж не сохраняется', () => {
+    expect(parseIncomeLinkHash('#task=RUSUPPORT-1&incomeDate=2026-11-05').error).toMatch(/сумма/);
+    expect(parseIncomeLinkHash('#incomeDate=2026-11-05&amount=0').error).toMatch(/сумма/);
+    expect(parseIncomeLinkHash('#incomeDate=2026-11-05&amount=-5').error).toMatch(/сумма/);
+    expect(parseIncomeLinkHash('#incomeDate=2026-11-05T10:00&amount=1').error).toMatch(/дата/);
+    expect(parseIncomeLinkHash('#amount=100').error).toMatch(/дата/);
+  });
+  it('сумма строго до двух знаков: 16.426 не превращается в 16426', () => {
+    expect(parseIncomeLinkHash('#incomeDate=2026-11-05&amount=16.426').error).toMatch(/не распознана/);
+    expect(parseIncomeLinkHash('#incomeDate=2026-11-05&amount=abc').error).toMatch(/не распознана/);
+    expect(parseIncomeLinkHash('#incomeDate=2026-11-05&amount=16426.5').amount).toBe('16426.5');
+  });
+  it('перенос платежа: дата со временем сохраняет исходное время, код вида прихода', () => {
+    const link = parseIncomeLinkHash(
+      '#task=RUSUPPORT-77541&incomeDate=2026-11-06%2016%3A57%3A08&amount=7620.00&incomeType=MI_Tinkoff',
+    );
+    expect(link.error).toBe('');
+    expect(link.incomeDate).toBe('2026-11-06 16:57:08');
+    expect(link.incomeType).toBe('MI_Tinkoff');
+    expect(toFormDateTime(link.incomeDate, new Date(2026, 10, 16, 9, 0, 0))).toBe('2026-11-06 16:57:08');
+    expect(parseIncomeLinkHash('#incomeDate=2026-11-06%2025%3A00%3A00&amount=1').error).toMatch(/дата/);
+  });
+  it('несуществующая дата — error', () => {
+    expect(parseIncomeLinkHash('#incomeDate=2026-13-45&amount=1').error).toMatch(/дата/);
+    expect(parseIncomeLinkHash('#incomeDate=31.02.2026&amount=1').error).toMatch(/дата/);
+    expect(parseIncomeLinkHash('#incomeDate=5.11.2026&amount=1').error).toBe('');
   });
 });
